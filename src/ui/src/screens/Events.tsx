@@ -17,10 +17,24 @@ export function Events({ range, setRange, onApp }: { range: number; setRange: (m
   const [kind, setKind] = useState<(typeof KINDS)[number]['key']>('all');
   const [q, setQ] = useState('');
 
-  const rows = useMemo(() => (ev.data ?? [])
-    .filter(e => kind === 'all' || e.kind === kind)
-    .filter(e => !q || e.app.toLowerCase().includes(q.toLowerCase()) || (e.detail ?? '').toLowerCase().includes(q.toLowerCase()))
-    .slice(0, 500), [ev.data, kind, q]);
+  // Одинаковые события подряд (та же программа, тот же тип и адрес) — одной строкой со счётчиком.
+  const rows = useMemo(() => {
+    const filtered = (ev.data ?? [])
+      .filter(e => kind === 'all' || e.kind === kind)
+      .filter(e => !q || e.app.toLowerCase().includes(q.toLowerCase()) || (e.detail ?? '').toLowerCase().includes(q.toLowerCase()));
+    const out: (SysEvent & { count: number; first: number })[] = [];
+    for (const e of filtered) {
+      const last = out[out.length - 1];
+      if (last && last.kind === e.kind && last.app === e.app && last.detail === e.detail && e.kind !== 'start') {
+        last.count++;
+        last.first = e.ts;
+      } else {
+        out.push({ ...e, count: 1, first: e.ts });
+      }
+      if (out.length >= 500) break;
+    }
+    return out;
+  }, [ev.data, kind, q]);
 
   return (
     <>
@@ -51,10 +65,13 @@ export function Events({ range, setRange, onApp }: { range: number; setRange: (m
       <div className="panel">
         {!rows.length ? <div className="empty">{ev.loading ? 'Загружаю…' : 'Событий нет.'}</div> : rows.map((e, i) => (
           <div className="ev" key={i}>
-            <time>{timeSec(e.ts)}</time>
+            <time title={e.count > 1 ? `${timeSec(e.first)}–${timeSec(e.ts)}` : undefined}>{timeSec(e.ts)}</time>
             <span className={`ev-kind ${e.kind}`}>{KIND_LABEL[e.kind]}</span>
             <span className="flow-app" title={`${e.app}, PID ${e.pid}`} onClick={() => onApp(e.app)}>{appLabel(e.app)}</span>
-            <span className="detail" title={e.detail ?? ''}>{e.detail ?? ''}</span>
+            <span className="detail" title={e.detail ?? ''}>
+              {e.detail ?? ''}
+              {e.count > 1 && <span className="repeat"> ×{e.count}, с {timeSec(e.first)}</span>}
+            </span>
           </div>
         ))}
       </div>

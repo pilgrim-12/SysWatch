@@ -202,6 +202,75 @@ function anomalies() {
   };
 }
 
+const ROOT = 'C:\\';
+const TREE: Record<string, [string, number, boolean, number | null][]> = {
+  'C:\\': [
+    ['Users', 168 * GB, true, 9.4 * GB], ['Windows', 41 * GB, true, 0.3 * GB], ['Program Files', 38 * GB, true, 0.8 * GB],
+    ['ProgramData', 22 * GB, true, 2.1 * GB], ['Program Files (x86)', 14 * GB, true, 0], ['hiberfil.sys', 12.6 * GB, false, 0],
+    ['pagefile.sys', 9.5 * GB, false, 0], ['GIT', 7.2 * GB, true, 0.6 * GB], ['swapfile.sys', 0.25 * GB, false, null],
+  ],
+  'C:\\Users': [['ANTRARES', 166 * GB, true, 9.4 * GB], ['Public', 1.2 * GB, true, 0]],
+  'C:\\Users\\ANTRARES': [
+    ['AppData', 71 * GB, true, 6.8 * GB], ['.nuget', 14.8 * GB, true, 0.9 * GB], ['Downloads', 21 * GB, true, 1.4 * GB],
+    ['AndroidStudioProjects', 9.1 * GB, true, 0], ['.android', 8.4 * GB, true, 0], ['Videos', 12 * GB, true, 0],
+    ['Documents', 6.3 * GB, true, 0.2 * GB], ['source', 5.9 * GB, true, 0.1 * GB], ['npm-cache', 3.8 * GB, true, 0.4 * GB],
+    ['.platformio', 2.9 * GB, true, 0], ['docker', 2.1 * GB, true, null],
+  ],
+};
+
+function diskState() {
+  const t = now();
+  return {
+    status: 'idle', progress: null, error: null,
+    drive: { root: ROOT, total: 476 * GB, free: 61.7 * GB },
+    snapshot: { id: 3, ts: t - 3 * 3600, scanned: 384 * GB, files: 1_284_311, seconds: 94, shadow: 11.2 * GB, hidden: 30.3 * GB },
+    compareTs: t - 7 * 86400,
+    lastClean: null,
+    cleanup: {
+      scannedAt: t - 3 * 3600,
+      categories: [
+        { id: 'temp', group: 'system', title: 'Временные файлы', description: 'Папки Temp пользователя и Windows. Файлы моложе суток не трогаем.', mode: 'delete', defaultOn: true, itemsSelectable: false, hint: null, size: 6.4 * GB, files: 48211, items: [{ path: 'C:\\Users\\ANTRARES\\AppData\\Local\\Temp', size: 5.9 * GB, files: 47001, modified: t - 86400 * 2 }, { path: 'C:\\Windows\\Temp', size: 0.5 * GB, files: 1210, modified: t - 86400 * 4 }] },
+        { id: 'windows_update', group: 'system', title: 'Загрузки обновлений Windows', description: 'Уже установленные обновления, которые Windows скачала заранее.', mode: 'delete', defaultOn: true, itemsSelectable: false, hint: null, size: 3.1 * GB, files: 812, items: [{ path: 'C:\\Windows\\SoftwareDistribution\\Download', size: 3.1 * GB, files: 812, modified: t - 86400 * 9 }] },
+        { id: 'browser_cache', group: 'system', title: 'Кэш браузеров', description: 'Chrome, Edge, Firefox. Сайты загрузятся заново. Открытые браузеры держат часть файлов — их пропустим.', mode: 'delete', defaultOn: true, itemsSelectable: false, hint: null, size: 2.7 * GB, files: 31022, items: [] },
+        { id: 'crash_dumps', group: 'system', title: 'Дампы падений и отчёты об ошибках', description: 'Снимки памяти упавших программ и отчёты для Microsoft.', mode: 'delete', defaultOn: true, itemsSelectable: false, hint: null, size: 1.9 * GB, files: 77, items: [] },
+        { id: 'thumbnails', group: 'system', title: 'Кэш миниатюр', description: 'Превью картинок в Проводнике. Пересоздастся сам.', mode: 'delete', defaultOn: true, itemsSelectable: false, hint: null, size: 0.4 * GB, files: 12, items: [] },
+        { id: 'recycle_bin', group: 'system', title: 'Корзина', description: 'Удалённые файлы, которые ещё можно восстановить. Очистка безвозвратна.', mode: 'delete', defaultOn: false, itemsSelectable: false, hint: null, size: 4.2 * GB, files: 341, items: [{ path: 'Корзина', size: 4.2 * GB, files: 341, modified: 0 }] },
+        { id: 'nuget', group: 'dev', title: 'Пакеты NuGet', description: 'Скачанные .NET-пакеты. При следующей сборке скачаются заново.', mode: 'delete', defaultOn: false, itemsSelectable: false, hint: null, size: 14.8 * GB, files: 210334, items: [] },
+        { id: 'npm', group: 'dev', title: 'Кэш npm, pnpm и Yarn', description: 'Скачанные JavaScript-пакеты. При установке скачаются заново.', mode: 'delete', defaultOn: false, itemsSelectable: false, hint: null, size: 6.1 * GB, files: 402110, items: [] },
+        { id: 'gradle', group: 'dev', title: 'Кэш Gradle', description: 'Зависимости Android- и Java-проектов. При сборке скачаются заново.', mode: 'delete', defaultOn: false, itemsSelectable: false, hint: null, size: 5.3 * GB, files: 61022, items: [] },
+        { id: 'old_builds', group: 'dev', title: 'Старые node_modules, bin, obj, .next', description: 'Папки сборок в проектах, которые не менялись 30+ дней. Уйдут в Корзину; вернуть — npm install или dotnet build.', mode: 'recycle', defaultOn: false, itemsSelectable: true, hint: null, size: 11.6 * GB, files: 380221,
+          items: [['C:\\GIT\\stellix-tv\\node_modules', 1.9], ['C:\\GIT\\harmonic-wave-studio\\node_modules', 1.4], ['C:\\Users\\ANTRARES\\source\\repos\\OrderSystem\\OrderSystem.Api\\bin', 0.6], ['C:\\GIT\\birdwatch\\.next', 0.4]].map(([p, g], i) => ({ path: p, size: (g as number) * GB, files: 20000, modified: t - 86400 * (40 + i * 20) })) },
+        { id: 'downloads', group: 'review', title: 'Большие старые файлы в «Загрузках»', description: 'Файлы от 50 МБ, которые не открывали 90+ дней. Ничего не отмечено — выбери сам. Уйдут в Корзину.', mode: 'recycle', defaultOn: false, itemsSelectable: true, hint: null, size: 9.2 * GB, files: 14, items: [{ path: 'C:\\Users\\ANTRARES\\Downloads\\ubuntu-24.04-desktop-amd64.iso', size: 5.7 * GB, files: 1, modified: t - 86400 * 210 }, { path: 'C:\\Users\\ANTRARES\\Downloads\\android-studio-2025.exe', size: 1.2 * GB, files: 1, modified: t - 86400 * 150 }] },
+        { id: 'docker', group: 'review', title: 'Docker', description: 'Образы, контейнеры и тома живут внутри одного файла-диска. Удалять сам файл нельзя.', mode: 'none', defaultOn: false, itemsSelectable: false, hint: 'docker system prune -a --volumes   — удалит неиспользуемое', size: 18.4 * GB, files: 1, items: [{ path: 'C:\\Users\\ANTRARES\\AppData\\Local\\Docker\\wsl\\disk\\docker_data.vhdx', size: 18.4 * GB, files: 1, modified: t - 3600 }] },
+        { id: 'windows_old', group: 'review', title: 'Предыдущая версия Windows', description: 'Остаётся после крупного обновления, нужна только для отката.', mode: 'none', defaultOn: false, itemsSelectable: false, hint: null, size: 0, files: 0, items: [] },
+      ],
+    },
+  };
+}
+
+function diskTree(path: string | null) {
+  const p = path || ROOT;
+  const rows = TREE[p] ?? [];
+  const items = rows.map(([name, size, isDir, delta]) => ({ path: (p.endsWith('\\') ? p : p + '\\') + name, name, isDir, size, files: 1000, delta }));
+  const total = p === ROOT ? 384 * GB : items.reduce((s, i) => s + i.size, 0) * 1.12;
+  return { path: p, size: total, delta: p === ROOT ? 13.5 * GB : null, items, other: total - items.reduce((s, i) => s + i.size, 0) };
+}
+
+function diskGrowth() {
+  return {
+    since: now() - 7 * 86400,
+    driveDelta: 13.5 * GB,
+    items: [
+      { path: 'C:\\Users\\ANTRARES\\AppData\\Local\\Docker\\wsl\\disk', size: 18.4 * GB, delta: 4.1 * GB, isNew: false },
+      { path: 'C:\\ProgramData\\Microsoft\\Windows\\WER\\ReportArchive', size: 1.6 * GB, delta: 1.5 * GB, isNew: true },
+      { path: 'C:\\Users\\ANTRARES\\Downloads', size: 21 * GB, delta: 1.4 * GB, isNew: false },
+      { path: 'C:\\Users\\ANTRARES\\AppData\\Local\\Temp', size: 5.9 * GB, delta: 1.2 * GB, isNew: false },
+      { path: 'C:\\Users\\ANTRARES\\.nuget\\packages', size: 14.8 * GB, delta: 0.9 * GB, isNew: false },
+      { path: 'C:\\GIT\\SysWatch\\src\\ui\\node_modules', size: 0.4 * GB, delta: 0.4 * GB, isNew: true },
+    ],
+  };
+}
+
 export function mockApi(req: IncomingMessage, res: ServerResponse, next: () => void) {
   if (!req.url?.startsWith('/api/')) return next();
   const u = new URL(req.url, 'http://x');
@@ -216,6 +285,9 @@ export function mockApi(req: IncomingMessage, res: ServerResponse, next: () => v
       case '/api/events': return events(range);
       case '/api/anomalies': return anomalies();
       case '/api/anomalies/seen': return true;
+      case '/api/disk': return diskState();
+      case '/api/disk/tree': return diskTree(u.searchParams.get('path'));
+      case '/api/disk/growth': return diskGrowth();
       case '/api/anomalies/ignore': return true;
       default: return null;
     }

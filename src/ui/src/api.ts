@@ -132,8 +132,45 @@ export interface AnomalyList {
   learning: boolean;   // нет истории прошлых дней — правила «новое» пока молчат
 }
 
-async function post(path: string): Promise<void> {
-  const r = await fetch(path, { method: 'POST' });
+// ── Диск ──
+
+export interface CleanupItem { path: string; size: number; files: number; modified: number }
+
+export interface CleanupCategory {
+  id: string;
+  group: 'system' | 'dev' | 'review';
+  title: string;
+  description: string;
+  mode: 'delete' | 'recycle' | 'none';
+  defaultOn: boolean;
+  itemsSelectable: boolean;
+  hint: string | null;
+  size: number;
+  files: number;
+  items: CleanupItem[];
+}
+
+export interface DiskState {
+  status: 'idle' | 'scanning' | 'cleaning';
+  progress: string | null;
+  drive: { root: string; total: number; free: number };
+  snapshot: { id: number; ts: number; scanned: number; files: number; seconds: number; shadow: number | null; hidden: number } | null;
+  compareTs: number | null;
+  cleanup: { scannedAt: number; categories: CleanupCategory[] } | null;
+  lastClean: { ts: number; freed: number; deleted: number; recycled: number; skipped: number } | null;
+  error: string | null;
+}
+
+export interface TreeItem { path: string; name: string; isDir: boolean; size: number; files: number; delta: number | null }
+export interface DiskTree { path: string; size: number; delta: number | null; items: TreeItem[]; other: number }
+export interface Growth { since: number | null; items: { path: string; size: number; delta: number; isNew: boolean }[]; driveDelta: number }
+
+async function post(path: string, body?: unknown): Promise<void> {
+  const r = await fetch(path, {
+    method: 'POST',
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
   if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
 }
 
@@ -152,6 +189,13 @@ export const api = {
   events: (range: number) => get<SysEvent[]>(`/api/events?range=${range}`),
   anomalies: (range: number) => get<AnomalyList>(`/api/anomalies?range=${range}`),
   anomaliesSeen: () => post('/api/anomalies/seen'),
+  disk: () => get<DiskState>('/api/disk'),
+  diskTree: (path: string | null) => get<DiskTree | null>(`/api/disk/tree${path ? `?path=${encodeURIComponent(path)}` : ''}`),
+  diskGrowth: () => get<Growth>('/api/disk/growth'),
+  diskScan: () => post('/api/disk/scan'),
+  diskCleanupScan: () => post('/api/disk/cleanup-scan'),
+  diskCancel: () => post('/api/disk/cancel'),
+  diskClean: (categories: string[], exclude: string[]) => post('/api/disk/clean', { categories, exclude }),
   anomalyIgnore: (rule: string, app: string) =>
     post(`/api/anomalies/ignore?rule=${encodeURIComponent(rule)}&app=${encodeURIComponent(app)}`),
 };

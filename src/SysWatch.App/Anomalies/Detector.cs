@@ -136,7 +136,7 @@ public sealed class Detector(DayFiles files, Signatures signatures, AnomalyStore
             ORDER BY 4 DESC
             """, ("$since", since)).Rows()
             .Select(r => (Image: r.GetString(0), Path: r.GetString(1), Dest: r.GetString(2), Bytes: r.Long0(3), Ts: r.GetInt64(4)))
-            .Where(x => !(IPAddress.TryParse(x.Dest, out var ip) && IPAddress.IsLoopback(ip)))
+            .Where(x => !IsLocal(x.Dest))
             .ToList();
 
         foreach (var g in rows.GroupBy(x => x.Path, StringComparer.OrdinalIgnoreCase))
@@ -152,6 +152,12 @@ public sealed class Detector(DayFiles files, Signatures signatures, AnomalyStore
                 $"unsigned_net|{g.Key}");
         }
     }
+
+    /// <summary>Соединения внутри компьютера (localhost, 127.0.0.1, ::1) — не выход в сеть.</summary>
+    private static bool IsLocal(string dest) =>
+        dest.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+        dest.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase) ||
+        (IPAddress.TryParse(dest, out var ip) && (IPAddress.IsLoopback(ip) || ip.Equals(IPAddress.Any) || ip.Equals(IPAddress.IPv6Any)));
 
     // ── Программа впервые запросила домен (браузеры и svchost не считаем: у них это норма) ──
 

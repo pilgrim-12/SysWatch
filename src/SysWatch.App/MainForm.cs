@@ -83,7 +83,10 @@ public sealed class MainForm : Form
             if (uri.AbsolutePath.StartsWith("/api/", StringComparison.Ordinal))
             {
                 var method = e.Request.Method;
-                var (status, body) = await Task.Run(() => _api.Handle(uri, method));
+                string? requestBody = null;
+                if (e.Request.Content is { } content)
+                    using (var reader = new StreamReader(content, Encoding.UTF8)) requestBody = await reader.ReadToEndAsync();
+                var (status, body) = await Task.Run(() => _api.Handle(uri, method, requestBody));
                 e.Response = Respond(Encoding.UTF8.GetBytes(body), status, "application/json; charset=utf-8");
             }
             else

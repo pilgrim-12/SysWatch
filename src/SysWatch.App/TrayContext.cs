@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using SysWatch.Agent.Interop;
 using SysWatch.App.Anomalies;
 using SysWatch.App.Data;
+using SysWatch.App.Disk;
 using SysWatch.App.Sampling;
 
 namespace SysWatch.App;
@@ -24,7 +25,10 @@ public sealed class TrayContext : ApplicationContext
     private readonly System.Windows.Forms.Timer _detectTimer = new() { Interval = 60_000 };
     private readonly AnomalyStore _anomalies = new();
     private readonly Detector _detector;
+    private readonly DiskService _disk = new();
+    private readonly System.Windows.Forms.Timer _diskTimer = new() { Interval = 3_600_000 };
     private bool _detecting;
+    private double _lastCpu = 100;
     private readonly ToolStripMenuItem _agentItem = new("Агент: проверяю…") { Enabled = false };
     private MainForm? _form;
 
@@ -35,7 +39,7 @@ public sealed class TrayContext : ApplicationContext
         var files = new DayFiles();
         var signatures = new Signatures();
         _queries = new Queries(files, signatures, _live.Alive);
-        _api = new Api(_queries, _live, _anomalies);
+        _api = new Api(_queries, _live, _anomalies, _disk);
         _detector = new Detector(files, signatures, _anomalies);
 
         var menu = new ContextMenuStrip();
@@ -58,6 +62,10 @@ public sealed class TrayContext : ApplicationContext
 
         _detectTimer.Tick += async (_, _) => await DetectAsync();
         _detectTimer.Start();
+
+        // Раз в час проверяем, не пора ли сделать суточный снимок диска (только если компьютер не занят).
+        _diskTimer.Tick += (_, _) => _disk.MaybeAutoScan(_lastCpu);
+        _diskTimer.Start();
 
         if (openWindow) ShowWindow();
     }
@@ -95,6 +103,7 @@ public sealed class TrayContext : ApplicationContext
             if (_kernel != 0 && dTotal > 0) cpu = Math.Clamp((1.0 - (double)dIdle / dTotal) * 100, 0, 100);
             _idle = idle; _kernel = kernel; _user = user;
         }
+        _lastCpu = cpu;
 
         var mem = new Native.MEMORYSTATUSEX { dwLength = (uint)Marshal.SizeOf<Native.MEMORYSTATUSEX>() };
         Native.GlobalMemoryStatusEx(ref mem);
@@ -117,7 +126,7 @@ public sealed class TrayContext : ApplicationContext
         _detecting = true;
         try
         {
-            var found = await Task.Run(_detector.Run);
+            var found = await Task.Run(() => _detector.Run());
             var notable = found.Where(a => a.Severity is "high" or "medium").ToList();
             if (notable.Count == 1)
                 _tray.ShowBalloonTip(10_000, notable[0].Title, notable[0].Detail, notable[0].Severity == "high" ? ToolTipIcon.Warning : ToolTipIcon.Info);
@@ -138,6 +147,8 @@ public sealed class TrayContext : ApplicationContext
     private void Quit()
     {
         _detectTimer.Stop();
+        _diskTimer.Stop();
+        _disk.Cancel();
         _timer.Stop();
         _form?.Close();
         _tray.Visible = false;
