@@ -1,0 +1,14 @@
+const base = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, viewBox: '0 0 24 24' };
+
+export const IconPulse = () => <svg {...base}><path d="M3 12h4l2-6 4 12 2-6h6" /></svg>;
+export const IconHeat = () => <svg {...base}><rect x="3" y="4" width="5" height="5" rx="1" /><rect x="10" y="4" width="5" height="5" rx="1" /><rect x="17" y="4" width="4" height="5" rx="1" /><rect x="3" y="11" width="5" height="5" rx="1" /><rect x="10" y="11" width="5" height="5" rx="1" /><rect x="3" y="18" width="5" height="3" rx="1" /></svg>;
+export const IconNet = () => <svg {...base}><circle cx="5" cy="12" r="2" /><circle cx="19" cy="5" r="2" /><circle cx="19" cy="12" r="2" /><circle cx="19" cy="19" r="2" /><path d="M7 12h10M7 11l10-5M7 13l10 5" /></svg>;
+export const IconList = () => <svg {...base}><path d="M8 6h13M8 12h13M8 18h13" /><circle cx="4" cy="6" r="1" /><circle cx="4" cy="12" r="1" /><circle cx="4" cy="18" r="1" /></svg>;
+export const IconApps = () => <svg {...base}><rect x="3" y="3" width="8" height="8" rx="2" /><rect x="13" y="3" width="8" height="8" rx="2" /><rect x="3" y="13" width="8" height="8" rx="2" /><rect x="13" y="13" width="8" height="8" rx="2" /></svg>;
+
+export const BrandMark = () => (
+  <svg className="brand-mark" viewBox="0 0 24 24" fill="none">
+    <rect x="1" y="1" width="22" height="22" rx="6" stroke="#4fc3d9" strokeWidth="1.5" />
+    <path d="M4 14h4l2-6 3 9 2-5h5" stroke="#f2b544" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);

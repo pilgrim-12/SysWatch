@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Worker">
 
   <PropertyGroup>
-    <TargetFramework>net9.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <OutputType>Exe</OutputType>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -18,9 +18,9 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="3.1.*" />
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.*" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.*" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="9.0.*" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.*" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.*" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.*" />
   </ItemGroup>
 
 </Project>

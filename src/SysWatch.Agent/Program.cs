@@ -20,6 +20,7 @@ builder.Services.Configure<AgentOptions>(builder.Configuration.GetSection("Agent
 builder.Services.AddSingleton<ProcessRegistry>();
 builder.Services.AddSingleton<Aggregator>();
 builder.Services.AddSingleton<EtwStats>();
+builder.Services.AddSingleton<Costs>();
 builder.Services.AddSingleton<SqliteStore>();
 
 builder.Services.AddHostedService<KernelEtwCollector>();

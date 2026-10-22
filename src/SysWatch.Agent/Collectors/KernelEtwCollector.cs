@@ -14,6 +14,7 @@ public sealed class KernelEtwCollector(
     ProcessRegistry registry,
     Aggregator aggregator,
     EtwStats stats,
+    Costs costs,
     ILogger<KernelEtwCollector> log) : BackgroundService
 {
     private const string SessionName = "SysWatch-Kernel";
@@ -35,6 +36,7 @@ public sealed class KernelEtwCollector(
     {
         try
         {
+            costs.KernelThread = Costs.OpenCurrentThread();
             _session = CreateSession();
             stats.KernelSession = _session;
             Subscribe(_session.Source.Kernel);
@@ -77,8 +79,9 @@ public sealed class KernelEtwCollector(
 
     private void Subscribe(KernelTraceEventParser k)
     {
-        k.ProcessStart += OnProcessStart;
-        k.ProcessDCStart += OnProcessStart; // процессы, запущенные до старта агента
+        k.ProcessStart += d => OnProcessStart(d, isNew: true);
+        // Rundown: процессы, запущенные до старта агента. Регистрируем, но не считаем «новыми».
+        k.ProcessDCStart += d => OnProcessStart(d, isNew: false);
         k.ProcessStop += d =>
         {
             Interlocked.Increment(ref stats.KernelEvents);
@@ -97,13 +100,13 @@ public sealed class KernelEtwCollector(
         k.UdpIpRecvIPV6 += d => Net(d.ProcessID, d.daddr, d.dport, Proto.Udp, 0, d.size, connect: false);
     }
 
-    private void OnProcessStart(ProcessTraceData d)
+    private void OnProcessStart(ProcessTraceData d, bool isNew)
     {
         Interlocked.Increment(ref stats.KernelEvents);
         if (d.ProcessID == _selfPid) return;
 
-        var p = registry.OnStart(d.ProcessID, d.ParentID, d.ImageFileName, d.CommandLine);
-        aggregator.ProcStarted(p);
+        var p = registry.OnStart(d.ProcessID, d.ParentID, d.ImageFileName, d.CommandLine, isRundown: !isNew);
+        if (isNew) aggregator.ProcStarted(p);
     }
 
     private void Net(int pid, IPAddress ip, int port, Proto proto, long tx, long rx, bool connect)

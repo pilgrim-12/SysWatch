@@ -34,7 +34,7 @@ public sealed class SqliteStore(IOptions<AgentOptions> options, ILogger<SqliteSt
 
         CREATE TABLE IF NOT EXISTS proc_1m(
             ts INTEGER NOT NULL, proc_id INTEGER NOT NULL,
-            cpu_ms INTEGER, ws_max INTEGER, io_read INTEGER, io_write INTEGER,
+            cpu_ms INTEGER, mem_private_max INTEGER, io_read INTEGER, io_write INTEGER,
             net_tx INTEGER, net_rx INTEGER,
             PRIMARY KEY(ts, proc_id)) WITHOUT ROWID;
 

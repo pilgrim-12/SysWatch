@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SysWatch.Agent/SysWatch.Agent.csproj" />
+    <Project Path="src/SysWatch.App/SysWatch.App.csproj" />
+  </Folder>
+</Solution>

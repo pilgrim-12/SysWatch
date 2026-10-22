@@ -12,6 +12,7 @@ public sealed class DnsEtwCollector(
     ProcessRegistry registry,
     Aggregator aggregator,
     EtwStats stats,
+    Costs costs,
     ILogger<DnsEtwCollector> log) : BackgroundService
 {
     private const string SessionName = "SysWatch-DNS";
@@ -31,6 +32,7 @@ public sealed class DnsEtwCollector(
     {
         try
         {
+            costs.DnsThread = Costs.OpenCurrentThread();
             _session = new TraceEventSession(SessionName) { BufferSizeMB = 2, StopOnDispose = true };
             stats.DnsSession = _session;
 

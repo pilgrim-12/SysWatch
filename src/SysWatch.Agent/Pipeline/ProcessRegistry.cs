@@ -33,8 +33,18 @@ public sealed class ProcessRegistry
     private readonly ConcurrentDictionary<int, ProcInfo> _byPid = new();
 
     /// <summary>Процесс стартовал (ETW ProcessStart) или уже был запущен (ProcessDCStart).</summary>
-    public ProcInfo OnStart(int pid, int parentPid, string image, string? commandLine)
+    public ProcInfo OnStart(int pid, int parentPid, string image, string? commandLine, bool isRundown)
     {
+        // Rundown описывает уже работающий процесс. Если сэмплер успел завести его раньше,
+        // дополняем существующий объект, а не создаём второй (иначе процесс считается дважды).
+        if (isRundown && _byPid.TryGetValue(pid, out var existing) && existing.ExitedUnix == 0)
+        {
+            if (!string.IsNullOrEmpty(image)) existing.Image = image;
+            existing.ParentPid = parentPid;
+            existing.CommandLine ??= commandLine;
+            return existing;
+        }
+
         var info = new ProcInfo(pid, string.IsNullOrEmpty(image) ? $"pid {pid}" : image)
         {
             ParentPid = parentPid,

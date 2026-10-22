@@ -12,6 +12,7 @@ public sealed class ProcessSampler(
     ProcessRegistry registry,
     Aggregator aggregator,
     IOptions<AgentOptions> options,
+    Costs costs,
     ILogger<ProcessSampler> log) : BackgroundService
 {
     private readonly record struct Prev(long Cpu100ns, long IoRead, long IoWrite);
@@ -43,6 +44,13 @@ public sealed class ProcessSampler(
 
     private void SampleOnce()
     {
+        long t0 = Costs.CurrentThreadTime();
+        try { SampleOnceCore(); }
+        finally { Interlocked.Add(ref costs.Sampler, Costs.CurrentThreadTime() - t0); }
+    }
+
+    private void SampleOnceCore()
+    {
         SampleSystem();
 
         if (!Native.EnumProcesses(_pids, (uint)(_pids.Length * sizeof(uint)), out var bytes)) return;
@@ -66,7 +74,8 @@ public sealed class ProcessSampler(
                     ResolvePath(h, info);
 
                 long cpu = kernel + user;
-                long ws = Native.GetProcessMemoryInfo(h, out var mem, Native.MemCountersSize) ? (long)mem.WorkingSetSize : 0;
+                // Частная память (private commit): не включает общие DLL, поэтому корректно суммируется.
+                long ws = Native.GetProcessMemoryInfo(h, out var mem, Native.MemCountersSize) ? (long)mem.PagefileUsage : 0;
                 long ioR = 0, ioW = 0;
                 if (Native.GetProcessIoCounters(h, out var io))
                 {

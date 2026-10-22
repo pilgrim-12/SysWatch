@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <OutputType>WinExe</OutputType>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>SysWatch</AssemblyName>
+    <RootNamespace>SysWatch.App</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <!-- Пакет WebView2 содержит и WPF-сборку; окну на WinForms она не нужна -->
+    <MSBuildWarningsAsMessages>$(MSBuildWarningsAsMessages);MSB3277</MSBuildWarningsAsMessages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.*" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Общие Win32-вызовы с агентом -->
+    <Compile Include="..\SysWatch.Agent\Interop\Native.cs" Link="Interop\Native.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Собранный React-интерфейс (src/ui → npm run build) -->
+    <None Include="wwwroot\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

@@ -15,6 +15,7 @@ public sealed class Flusher(
     ProcessRegistry registry,
     SqliteStore store,
     EtwStats stats,
+    Costs costs,
     IOptions<AgentOptions> options,
     ILogger<Flusher> log) : BackgroundService
 {
@@ -22,6 +23,10 @@ public sealed class Flusher(
     private TimeSpan _lastCpu;
     private long _lastTicks;
     private long _lastKernelEvents, _lastDnsEvents;
+    private long _lastProc, _lastKernelCpu, _lastDnsCpu, _lastSampler, _lastWriter;
+
+    /// <summary>Разбивка CPU агента за интервал, % от всех ядер.</summary>
+    private readonly record struct Breakdown(double Kernel, double Dns, double Sampler, double Writer, double Other);
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
@@ -66,6 +71,7 @@ public sealed class Flusher(
         _lastDnsEvents = dns;
 
         var sw = Stopwatch.StartNew();
+        long w0 = Costs.CurrentThreadTime();
         try
         {
             store.Write(bucket, self, aggregator.IpToDomain);
@@ -74,13 +80,31 @@ public sealed class Flusher(
         {
             log.LogError(ex, "Write failed");
         }
+        Interlocked.Add(ref costs.Writer, Costs.CurrentThreadTime() - w0);
         sw.Stop();
 
         registry.Sweep();
-        log.LogInformation("{Summary}", Summary(bucket, self, elapsedMs, sw.ElapsedMilliseconds));
+        var breakdown = Measure(cpu, elapsedMs);
+        log.LogInformation("{Summary}", Summary(bucket, self, elapsedMs, sw.ElapsedMilliseconds, breakdown));
     }
 
-    private string Summary(MinuteBucket b, SelfSample self, double elapsedMs, long writeMs)
+    private Breakdown Measure(TimeSpan processCpu, double elapsedMs)
+    {
+        long proc = processCpu.Ticks; // тики TimeSpan = 100 нс
+        long kernel = Costs.ThreadTime(costs.KernelThread), dns = Costs.ThreadTime(costs.DnsThread);
+        long sampler = Interlocked.Read(ref costs.Sampler), writer = Interlocked.Read(ref costs.Writer);
+
+        long dProc = proc - _lastProc, dK = kernel - _lastKernelCpu, dD = dns - _lastDnsCpu;
+        long dS = sampler - _lastSampler, dW = writer - _lastWriter;
+        _lastProc = proc; _lastKernelCpu = kernel; _lastDnsCpu = dns; _lastSampler = sampler; _lastWriter = writer;
+
+        double denom = elapsedMs * 10_000 * Environment.ProcessorCount / 100.0; // 100 нс → % всех ядер
+        if (denom <= 0) return default;
+        return new Breakdown(dK / denom, dD / denom, dS / denom, dW / denom,
+            Math.Max(0, dProc - dK - dD - dS - dW) / denom);
+    }
+
+    private string Summary(MinuteBucket b, SelfSample self, double elapsedMs, long writeMs, Breakdown c)
     {
         double cores = Environment.ProcessorCount;
         var sb = new StringBuilder();
@@ -90,19 +114,31 @@ public sealed class Flusher(
         if (b.SysSamples > 0)
             sb.AppendLine($"Система:   CPU {b.SysCpuSum / b.SysSamples,5:F1}%   RAM {b.SysMemSum / b.SysSamples,4:F0}%");
 
+        // Группируем по имени программы: 20 процессов chrome.exe → одна строка «chrome.exe ×20».
+        var apps = b.Procs
+            .GroupBy(x => x.Key.Image, StringComparer.OrdinalIgnoreCase)
+            .Select(g => (
+                Name: g.Key,
+                Count: g.Count(),
+                Cpu: g.Sum(x => x.Value.CpuMs),
+                Ram: g.Sum(x => x.Value.WsMax),
+                Tx: g.Sum(x => x.Value.NetTx),
+                Rx: g.Sum(x => x.Value.NetRx)))
+            .ToList();
+
         sb.AppendLine("Топ CPU:");
-        foreach (var (p, c) in b.Procs.OrderByDescending(x => x.Value.CpuMs).Take(5))
+        foreach (var a in apps.OrderByDescending(x => x.Cpu).Take(5))
         {
-            if (c.CpuMs == 0) break;
-            double pct = c.CpuMs / (elapsedMs * cores) * 100.0;
-            sb.AppendLine($"  {Trim(p.Image),-28} {pct,6:F2}%   RAM {c.WsMax / 1048576,6} MB");
+            if (a.Cpu == 0) break;
+            double pct = a.Cpu / (elapsedMs * cores) * 100.0;
+            sb.AppendLine($"  {Label(a.Name, a.Count),-28} {pct,6:F2}%   RAM {a.Ram / 1048576,6} MB");
         }
 
         sb.AppendLine("Топ сеть (↑/↓):");
-        foreach (var (p, c) in b.Procs.OrderByDescending(x => x.Value.NetTx + x.Value.NetRx).Take(5))
+        foreach (var a in apps.OrderByDescending(x => x.Tx + x.Rx).Take(5))
         {
-            if (c.NetTx + c.NetRx == 0) break;
-            sb.AppendLine($"  {Trim(p.Image),-28} {Kb(c.NetTx),9} / {Kb(c.NetRx),9}");
+            if (a.Tx + a.Rx == 0) break;
+            sb.AppendLine($"  {Label(a.Name, a.Count),-28} {Kb(a.Tx),9} / {Kb(a.Rx),9}");
         }
 
         sb.AppendLine($"Соединений: {b.Conns.Count}   DNS-запросов: {b.Dns.Count}   " +
@@ -111,11 +147,19 @@ public sealed class Flusher(
         sb.Append($"Агент:     CPU {self.CpuPct:F2}%   RAM {self.WorkingSet / 1048576} MB   " +
                   $"GC {self.GcHeap / 1048576} MB   ETW {(self.KernelEvents + self.DnsEvents) / Math.Max(1, elapsedMs / 1000):F0} соб/с   " +
                   $"потеряно {self.EventsLost}   запись {writeMs} мс");
+        sb.AppendLine();
+        sb.Append($"  из них:  ETW ядро {c.Kernel:F2}%   DNS {c.Dns:F2}%   опрос процессов {c.Sampler:F2}%   " +
+                  $"запись {c.Writer:F2}%   прочее (JIT, GC, таймеры) {c.Other:F2}%   ядер: {Environment.ProcessorCount}");
 
         return sb.ToString();
     }
 
-    private static string Trim(string s) => s.Length <= 28 ? s : s[..27] + "…";
+    private static string Label(string name, int count)
+    {
+        var suffix = count > 1 ? $" ×{count}" : "";
+        int max = 28 - suffix.Length;
+        return (name.Length <= max ? name : name[..(max - 1)] + "…") + suffix;
+    }
 
     private static string Kb(long bytes) => bytes < 1024 * 1024
         ? $"{bytes / 1024.0:F1} KB"
