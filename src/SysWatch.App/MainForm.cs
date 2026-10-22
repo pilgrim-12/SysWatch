@@ -21,9 +21,12 @@ public sealed class MainForm : Form
     private readonly string _root = Path.Combine(AppContext.BaseDirectory, "wwwroot");
     private CoreWebView2Environment? _env;
 
-    public MainForm(Api api, Icon icon)
+    private readonly string _hash;
+
+    public MainForm(Api api, Icon icon, string? hash = null)
     {
         _api = api;
+        _hash = hash ?? "";
         Icon = icon;
         Text = "SysWatch";
         BackColor = Ink;
@@ -68,7 +71,7 @@ public sealed class MainForm : Form
         core.WebResourceRequested += OnRequest;
         core.NewWindowRequested += (_, e) => e.Handled = true; // никаких всплывающих окон
 
-        core.Navigate(Host + "index.html");
+        core.Navigate(Host + "index.html" + _hash);
     }
 
     private async void OnRequest(object? sender, CoreWebView2WebResourceRequestedEventArgs e)
@@ -79,7 +82,8 @@ public sealed class MainForm : Form
             var uri = new Uri(e.Request.Uri);
             if (uri.AbsolutePath.StartsWith("/api/", StringComparison.Ordinal))
             {
-                var (status, body) = await Task.Run(() => _api.Handle(uri));
+                var method = e.Request.Method;
+                var (status, body) = await Task.Run(() => _api.Handle(uri, method));
                 e.Response = Respond(Encoding.UTF8.GetBytes(body), status, "application/json; charset=utf-8");
             }
             else
@@ -128,6 +132,12 @@ public sealed class MainForm : Form
         ".woff" => "font/woff",
         _ => "application/octet-stream",
     };
+
+    /// <summary>Перейти к разделу интерфейса, например "#anomalies".</summary>
+    public void GoTo(string hash)
+    {
+        _ = _web.CoreWebView2?.ExecuteScriptAsync($"location.hash = {System.Text.Json.JsonSerializer.Serialize(hash)}");
+    }
 
     // Тёмный заголовок окна в Windows 10 20H1+ и Windows 11.
     [DllImport("dwmapi.dll")]

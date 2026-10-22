@@ -1,13 +1,15 @@
 using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
 using SysWatch.Agent.Interop;
+using SysWatch.App.Anomalies;
 using SysWatch.App.Data;
 using SysWatch.App.Sampling;
 
 namespace SysWatch.App;
 
 /// <summary>
-/// Жизнь приложения в трее: иконка с подсказкой (процессор, память, агент), меню, открытие окна.
+/// Жизнь приложения в трее: иконка с подсказкой (процессор, память, агент), меню, открытие окна,
+/// раз в минуту — поиск аномалий и уведомления о важных.
 /// Пока окно закрыто, раз в 5 секунд снимаются только две системные цифры.
 /// </summary>
 public sealed class TrayContext : ApplicationContext
@@ -16,8 +18,13 @@ public sealed class TrayContext : ApplicationContext
     private readonly LiveSampler _live = new();
     private readonly Queries _queries;
     private readonly Api _api;
-    private readonly Icon _icon = MakeIcon();
+    private readonly Icon _icon = LoadIcon();
+    private readonly Icon _windowIcon = LoadIcon(large: true);
     private readonly System.Windows.Forms.Timer _timer = new() { Interval = 5000 };
+    private readonly System.Windows.Forms.Timer _detectTimer = new() { Interval = 60_000 };
+    private readonly AnomalyStore _anomalies = new();
+    private readonly Detector _detector;
+    private bool _detecting;
     private readonly ToolStripMenuItem _agentItem = new("Агент: проверяю…") { Enabled = false };
     private MainForm? _form;
 
@@ -25,13 +32,17 @@ public sealed class TrayContext : ApplicationContext
 
     public TrayContext(bool openWindow)
     {
-        _queries = new Queries(new DayFiles(), new Signatures(), _live.Alive);
-        _api = new Api(_queries, _live);
+        var files = new DayFiles();
+        var signatures = new Signatures();
+        _queries = new Queries(files, signatures, _live.Alive);
+        _api = new Api(_queries, _live, _anomalies);
+        _detector = new Detector(files, signatures, _anomalies);
 
         var menu = new ContextMenuStrip();
         var open = new ToolStripMenuItem("Открыть SysWatch", null, (_, _) => ShowWindow());
         open.Font = new Font(open.Font, FontStyle.Bold);
         menu.Items.Add(open);
+        menu.Items.Add(new ToolStripMenuItem("Аномалии", null, (_, _) => ShowWindow("#anomalies")));
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_agentItem);
         menu.Items.Add(new ToolStripSeparator());
@@ -39,26 +50,35 @@ public sealed class TrayContext : ApplicationContext
 
         _tray = new NotifyIcon { Icon = _icon, Text = "SysWatch", ContextMenuStrip = menu, Visible = true };
         _tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) ShowWindow(); };
+        _tray.BalloonTipClicked += (_, _) => ShowWindow("#anomalies");
 
         _timer.Tick += (_, _) => Refresh();
         _timer.Start();
         Refresh();
 
+        _detectTimer.Tick += async (_, _) => await DetectAsync();
+        _detectTimer.Start();
+
         if (openWindow) ShowWindow();
     }
 
-    /// <summary>Открыть окно или поднять уже открытое.</summary>
-    public void ShowWindow()
+    /// <summary>Открыть окно (при необходимости — сразу на разделе hash) или поднять уже открытое.</summary>
+    public void ShowWindow(string? hash = null)
     {
         if (_form is null || _form.IsDisposed)
         {
-            _form = new MainForm(_api, _icon);
+            _form = new MainForm(_api, _windowIcon, hash);
             _form.FormClosed += (_, _) =>
             {
                 _form = null;
                 GC.Collect(); // освобождаем память окна сразу, а не когда-нибудь потом
             };
             _form.Show();
+        }
+
+        else if (hash is not null)
+        {
+            _form.GoTo(hash);
         }
 
         if (_form.WindowState == FormWindowState.Minimized) _form.WindowState = FormWindowState.Normal;
@@ -90,14 +110,49 @@ public sealed class TrayContext : ApplicationContext
         _tray.Text = text.Length > 127 ? text[..127] : text;
     }
 
+    /// <summary>Поиск аномалий в фоне; о важных (high, medium) — уведомление Windows.</summary>
+    private async Task DetectAsync()
+    {
+        if (_detecting) return;
+        _detecting = true;
+        try
+        {
+            var found = await Task.Run(_detector.Run);
+            var notable = found.Where(a => a.Severity is "high" or "medium").ToList();
+            if (notable.Count == 1)
+                _tray.ShowBalloonTip(10_000, notable[0].Title, notable[0].Detail, notable[0].Severity == "high" ? ToolTipIcon.Warning : ToolTipIcon.Info);
+            else if (notable.Count > 1)
+                _tray.ShowBalloonTip(10_000, $"SysWatch: новых аномалий — {notable.Count}",
+                    string.Join("\n", notable.Take(3).Select(a => $"{a.Title}: {a.App}")), ToolTipIcon.Warning);
+        }
+        catch (Exception)
+        {
+            // Детектор не должен ронять приложение: следующая попытка через минуту.
+        }
+        finally
+        {
+            _detecting = false;
+        }
+    }
+
     private void Quit()
     {
+        _detectTimer.Stop();
         _timer.Stop();
         _form?.Close();
         _tray.Visible = false;
         _tray.Dispose();
         _live.Dispose();
         ExitThread();
+    }
+
+    /// <summary>Иконка из syswatch.ico рядом с exe; если файла нет — нарисованная на лету.</summary>
+    private static Icon LoadIcon(bool large = false)
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "syswatch.ico");
+        try { if (File.Exists(path)) return large ? new Icon(path) : new Icon(path, SystemInformation.SmallIconSize); }
+        catch (Exception) { /* битый файл — рисуем сами */ }
+        return MakeIcon();
     }
 
     /// <summary>Иконка: импульс янтарного цвета в тёмно-синей рамке, как в окне.</summary>

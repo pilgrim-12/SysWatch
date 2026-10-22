@@ -9,7 +9,7 @@
     <AssemblyName>SysWatch</AssemblyName>
     <RootNamespace>SysWatch.App</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <InvariantGlobalization>true</InvariantGlobalization>
+    <ApplicationIcon>syswatch.ico</ApplicationIcon>
     <ServerGarbageCollection>false</ServerGarbageCollection>
     <!-- Пакет WebView2 содержит и WPF-сборку; окну на WinForms она не нужна -->
     <MSBuildWarningsAsMessages>$(MSBuildWarningsAsMessages);MSB3277</MSBuildWarningsAsMessages>
@@ -27,6 +27,7 @@
 
   <ItemGroup>
     <!-- Собранный React-интерфейс (src/ui → npm run build) -->
+    <None Include="syswatch.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="wwwroot\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 

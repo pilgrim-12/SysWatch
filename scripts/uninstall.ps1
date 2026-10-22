@@ -1,6 +1,12 @@
-﻿#Requires -RunAsAdministrator
-# Удаляет SysWatch. История удаляется только с ключом -RemoveData.
+﻿# Удаляет SysWatch. История удаляется только с ключом -RemoveData.
 param([switch]$RemoveData)
+# Нет прав администратора — перезапускаем себя с запросом UAC.
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin) {
+    $argsLine = ($MyInvocation.BoundParameters.Keys | ForEach-Object { "-$_" }) -join ' '
+    Start-Process powershell.exe -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -NoExit -File `"$PSCommandPath`" $argsLine"
+    exit
+}
 $ErrorActionPreference = 'Continue'
 
 Get-Process SysWatch -ErrorAction SilentlyContinue | Stop-Process -Force

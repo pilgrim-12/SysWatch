@@ -1,11 +1,17 @@
-﻿#Requires -RunAsAdministrator
-<#
+﻿<#
   Ставит SysWatch целиком одной командой:
     1. агент  — служба Windows SysWatchAgent, стартует вместе с системой;
     2. окно   — SysWatch.exe, при входе в Windows запускается в трей (без запроса UAC);
     3. ярлык  — «SysWatch» в меню Пуск.
   Повторный запуск обновляет установку после изменений в коде.
 #>
+# Нет прав администратора — перезапускаем себя с запросом UAC.
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin) {
+    $argsLine = ($MyInvocation.BoundParameters.Keys | ForEach-Object { "-$_" }) -join ' '
+    Start-Process powershell.exe -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -NoExit -File `"$PSCommandPath`" $argsLine"
+    exit
+}
 $ErrorActionPreference = 'Stop'
 
 $root     = Split-Path $PSScriptRoot -Parent
@@ -62,6 +68,7 @@ $sc = $shell.CreateShortcut($lnk)
 $sc.TargetPath = $appExe
 $sc.WorkingDirectory = $appDir
 $sc.Description = 'Монитор системы SysWatch'
+$sc.IconLocation = "$appExe,0"
 $sc.Save()
 
 Step 'Запускаю'

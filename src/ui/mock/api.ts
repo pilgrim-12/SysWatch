@@ -184,6 +184,24 @@ function events(range: number) {
   return out;
 }
 
+function anomalies() {
+  const t = now();
+  const items = [
+    { rule: 'unsigned_net', severity: 'high', app: 'mbbService.exe', title: 'Программа без подписи выходит в сеть', detail: 'C:\\Program Files\\Mobile Broadband\\mbbService.exe подключалась к 185.199.108.153, telemetry.mbb-update.net. У файла нет цифровой подписи издателя.', ago: 240 },
+    { rule: 'autostart', severity: 'high', app: 'updater.exe', title: 'Новое в автозагрузке', detail: 'Реестр HKCU\\…\\Run: QuickUpdater → "C:\\Users\\ANTRARES\\AppData\\Roaming\\QuickUpdater\\updater.exe" --silent', ago: 1800 },
+    { rule: 'cpu', severity: 'medium', app: 'msedgewebview2.exe', title: 'Долгая высокая нагрузка', detail: 'msedgewebview2.exe держит процессор на 41% всех ядер уже 5 минут подряд', ago: 3600 },
+    { rule: 'temp_exec', severity: 'medium', app: 'setup_x64.exe', title: 'Запуск из временной папки', detail: 'C:\\Users\\ANTRARES\\Downloads\\setup_x64.exe. Так запускаются установщики, но и вредоносные программы тоже.', ago: 7200 },
+    { rule: 'memory', severity: 'medium', app: 'Code.exe', title: 'Память растёт', detail: 'Code.exe: 860 МБ → 2,3 ГБ за час без снижения. Похоже на утечку памяти.', ago: 9000 },
+    { rule: 'new_domain', severity: 'low', app: 'Telegram.exe', title: 'Новый адрес у программы', detail: 'Telegram.exe впервые обратилась к cdn5.telesco.pe', ago: 15000 },
+    { rule: 'new_program', severity: 'low', app: 'ffmpeg.exe', title: 'Новая программа', detail: 'Впервые запущена: C:\\Tools\\ffmpeg\\bin\\ffmpeg.exe', ago: 30000 },
+  ];
+  return {
+    items: items.map((a, i) => ({ id: i + 1, ts: t - a.ago, rule: a.rule, severity: a.severity, app: a.app, title: a.title, detail: a.detail, seen: i > 2 })),
+    unseen: 3,
+    learning: false,
+  };
+}
+
 export function mockApi(req: IncomingMessage, res: ServerResponse, next: () => void) {
   if (!req.url?.startsWith('/api/')) return next();
   const u = new URL(req.url, 'http://x');
@@ -196,6 +214,9 @@ export function mockApi(req: IncomingMessage, res: ServerResponse, next: () => v
       case '/api/network': return network(range);
       case '/api/app': return app(u.searchParams.get('name') ?? '', range);
       case '/api/events': return events(range);
+      case '/api/anomalies': return anomalies();
+      case '/api/anomalies/seen': return true;
+      case '/api/anomalies/ignore': return true;
       default: return null;
     }
   })();

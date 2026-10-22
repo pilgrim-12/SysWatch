@@ -113,6 +113,30 @@ export interface Overview {
   minutes: number[];
 }
 
+export type Severity = 'high' | 'medium' | 'low';
+
+export interface Anomaly {
+  id: number;
+  ts: number;
+  rule: 'unsigned_net' | 'temp_exec' | 'new_program' | 'new_domain' | 'autostart' | 'cpu' | 'memory' | string;
+  severity: Severity;
+  app: string;
+  title: string;
+  detail: string;
+  seen: boolean;
+}
+
+export interface AnomalyList {
+  items: Anomaly[];
+  unseen: number;
+  learning: boolean;   // нет истории прошлых дней — правила «новое» пока молчат
+}
+
+async function post(path: string): Promise<void> {
+  const r = await fetch(path, { method: 'POST' });
+  if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+}
+
 async function get<T>(path: string): Promise<T> {
   const r = await fetch(path);
   if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
@@ -126,4 +150,8 @@ export const api = {
   network: (range: number) => get<Network>(`/api/network?range=${range}`),
   app: (name: string, range: number) => get<AppDetail>(`/api/app?name=${encodeURIComponent(name)}&range=${range}`),
   events: (range: number) => get<SysEvent[]>(`/api/events?range=${range}`),
+  anomalies: (range: number) => get<AnomalyList>(`/api/anomalies?range=${range}`),
+  anomaliesSeen: () => post('/api/anomalies/seen'),
+  anomalyIgnore: (rule: string, app: string) =>
+    post(`/api/anomalies/ignore?rule=${encodeURIComponent(rule)}&app=${encodeURIComponent(app)}`),
 };
