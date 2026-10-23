@@ -10,6 +10,7 @@ using SysWatch.App.Programs;
 using SysWatch.App.Reports;
 using SysWatch.App.Sys;
 using SysWatch.App.Sampling;
+using SysWatch.App.Settings;
 
 namespace SysWatch.App;
 
@@ -38,6 +39,9 @@ public sealed class TrayContext : ApplicationContext
     private bool _applyingHistory;
     private readonly System.Windows.Forms.Timer _diskTimer = new() { Interval = 3_600_000 };
     private readonly Insights _insights;
+    private readonly ReportCenter _reports;
+    private readonly Alerts _alerts;
+    private readonly GpuQueries _gpu;
     private string _balloonTarget = "#anomalies";
     private bool _detecting;
     private double _lastCpu = 100;
@@ -55,9 +59,17 @@ public sealed class TrayContext : ApplicationContext
         var firewall = new Firewall(_anomalies);
         var installed = new Installed(files, LiveSampler.RunningPaths);
         _insights = new Insights(files, _anomalies, _disk);
+        var startup = new Startup(signatures);
+        var dev = new DevEnv(installed);
+        var gpuQueries = _gpu = new GpuQueries(files);
+        var settings = new AppSettings(files);
+        _alerts = new Alerts(settings);
+        var health = new Health(_queries, _insights, _anomalies, _disk, startup, dev, gpuQueries);
+        _reports = new ReportCenter(health, _insights, _queries, _anomalies, startup, firewall, dev, _disk);
         _history = new BrowserHistory(_anomalies);
         _api = new Api(_queries, _live, _anomalies, _disk, connections, installed, firewall, _geo,
-            new Startup(signatures), _hardware, _insights, new DevEnv(installed), _history, new GpuQueries(files));
+            startup, _hardware, _insights, dev, _history, gpuQueries, health, _reports,
+            settings, new LocalAi(settings), new Updates());
         _detector = new Detector(files, signatures, _anomalies);
 
         L.SetDefault(_anomalies.Get("ui_lang")); // язык, выбранный в окне
@@ -100,7 +112,7 @@ public sealed class TrayContext : ApplicationContext
         _detectTimer.Start();
 
         // Раз в час проверяем, не пора ли сделать суточный снимок диска (только если компьютер не занят).
-        _diskTimer.Tick += async (_, _) => { _disk.MaybeAutoScan(_lastCpu); await DigestAsync(); };
+        _diskTimer.Tick += async (_, _) => { _disk.MaybeAutoScan(_lastCpu); Notify(_alerts.CheckDisk()); await DigestAsync(); await ScheduledReportsAsync(); };
         _diskTimer.Start();
 
         // Отложенное удаление истории: ждём, пока пользователь сам закроет браузер, и удаляем.
@@ -108,6 +120,20 @@ public sealed class TrayContext : ApplicationContext
         _historyTimer.Start();
 
         if (openWindow) ShowWindow();
+    }
+
+    /// <summary>Отчёты по расписанию (раз в час проверяем, каким пора) — в «Документы\\SysWatch\\Reports».</summary>
+    private async Task ScheduledReportsAsync()
+    {
+        try
+        {
+            var files = await Task.Run(() => _reports.RunDue());
+            if (files.Count == 0) return;
+            _balloonTarget = "#report";
+            _tray.ShowBalloonTip(8_000, L.T("SysWatch: отчёт готов"),
+                string.Join("\n", files.Select(Path.GetFileName)), ToolTipIcon.Info);
+        }
+        catch (Exception) { /* попробуем через час */ }
     }
 
     private async Task ApplyHistoryAsync()
@@ -169,6 +195,9 @@ public sealed class TrayContext : ApplicationContext
         var mem = new Native.MEMORYSTATUSEX { dwLength = (uint)Marshal.SizeOf<Native.MEMORYSTATUSEX>() };
         Native.GlobalMemoryStatusEx(ref mem);
 
+        try { Notify(_alerts.Observe(cpu, mem.dwMemoryLoad, () => TopApp(byCpu: true), () => TopApp(byCpu: false))); }
+        catch (Exception) { /* оповещения не должны мешать трею */ }
+
         var agent = _queries.Agent();
         string agentLine = agent.Running
             ? L.T("Агент работает, {0:F1}% процессора", agent.Cpu)
@@ -180,6 +209,25 @@ public sealed class TrayContext : ApplicationContext
         _tray.Text = text.Length > 127 ? text[..127] : text;
     }
 
+    private void Notify(AlertMessage? m)
+    {
+        if (m is null) return;
+        _balloonTarget = m.Hash;
+        _tray.ShowBalloonTip(10_000, m.Title, m.Text, ToolTipIcon.Warning);
+    }
+
+    /// <summary>Кто сейчас больше всех грузит процессор или занимает память (только в момент оповещения).</summary>
+    private string? TopApp(bool byCpu)
+    {
+        try
+        {
+            var apps = _live.Sample(_queries.Agent()).Apps;
+            var top = byCpu ? apps.Where(a => a.Cpu > 0).OrderByDescending(a => a.Cpu).FirstOrDefault() : apps.OrderByDescending(a => a.Mem).FirstOrDefault();
+            return top?.Name;
+        }
+        catch (Exception) { return null; }
+    }
+
     /// <summary>Поиск аномалий в фоне; о важных (high, medium) — уведомление Windows.</summary>
     private async Task DetectAsync()
     {
@@ -187,6 +235,13 @@ public sealed class TrayContext : ApplicationContext
         _detecting = true;
         try
         {
+            try
+            {
+                var temp = await Task.Run(() => _gpu.Get(10).Adapters.Select(a => a.PeakTemp).Max());
+                Notify(_alerts.CheckGpu(temp));
+            }
+            catch (Exception) { /* нет видеокарты или данных — молчим */ }
+
             var found = await Task.Run(() => _detector.Run());
             var notable = found.Where(a => a.Severity is "high" or "medium").ToList();
             if (notable.Count > 0) _balloonTarget = "#anomalies";

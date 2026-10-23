@@ -40,6 +40,9 @@ public sealed class DevEnv(Installed installed)
 {
     private readonly object _gate = new();
     private DevEnvironment? _data;
+
+    /// <summary>Последний результат сканирования без запуска нового (для «Обзора» и отчётов).</summary>
+    public DevEnvironment? Cached { get { lock (_gate) return _data; } }
     private string? _dataLang; // тексты (заметки, названия групп) формируются на языке сканирования
     private bool _busy;
 

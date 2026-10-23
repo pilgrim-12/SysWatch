@@ -97,11 +97,11 @@ export function AppDetail({ name, range, setRange, onBack }: { name: string; ran
             <Plot ts={d.series.ts} series={charts.mem} height={150} yFormat={v => bytes(v, 0)} />
           </div>
           <div className="panel chart-box">
-            <h3>{t('Сеть, за минуту')} <b style={{ color: COLOR.net }}>{t('{0} получено, {1} отправлено', bytes(sum(d.series.netRx)), bytes(sum(d.series.netTx)))}</b></h3>
+            <h3>{t('Сеть')} <b style={{ color: COLOR.net }}>{t('{0} получено, {1} отправлено', bytes(sum(d.series.netRx)), bytes(sum(d.series.netTx)))}</b></h3>
             <Plot ts={d.series.ts} series={charts.net} height={150} yFormat={v => bytes(v, 0)} />
           </div>
           <div className="panel chart-box">
-            <h3>{t('Диск, за минуту')} <b style={{ color: COLOR.disk }}>{t('{0} всего', bytes(sum(d.series.io)))}</b></h3>
+            <h3 title={t('Сколько данных программа прочитала с дисков и записала на них. Это объём работы диска, а не занятое место.')}>{t('Чтение и запись данных')} <b style={{ color: COLOR.disk }}>{t('{0} прочитано и записано', bytes(sum(d.series.io)))}</b></h3>
             <Plot ts={d.series.ts} series={charts.io} height={150} yFormat={v => bytes(v, 0)} />
           </div>
         </div>

@@ -161,13 +161,6 @@ export function History() {
           </select>
         )}
         {data.loading && <span className="dim" style={{ fontSize: 13 }}>{t('Читаю историю…')}</span>}
-        {kind !== 'domains' && selected.size > 0 && (
-          <div className="sel-bar">
-            <span>{t('Выбрано: {0}', selected.size)}</span>
-            <button className="btn danger" disabled={busy} onClick={() => remove({ items: [...selected.values()] }, t('выбранные записи ({0})', selected.size))}>{busy ? t('Удаляю…') : t('Удалить из истории')}</button>
-            <button className="link dim" onClick={() => setSelected(new Map())}>{t('Снять выбор')}</button>
-          </div>
-        )}
       </div>
 
       {!r ? <div className="empty">{data.error ? '' : t('Читаю историю браузеров…')}</div> : kind === 'profiles' ? (
@@ -246,6 +239,13 @@ export function History() {
       {r && r.items.length >= 1500 && <p className="hint-line">{t('Показаны последние 1500 записей. Уточните поиск или период.')}</p>}
       <p className="hint-line">{t('Режим инкогнито браузеры не записывают — его здесь нет. Ссылки открываются в браузере по умолчанию.')}{' '}
         {t('Удаление действует на этот компьютер: если в браузере включена синхронизация, история в аккаунте Google, Microsoft или Firefox остаётся — её чистят в настройках аккаунта.')}</p>
+      {kind !== 'domains' && selected.size > 0 && (
+          <div className="sel-bar floating">
+            <span>{t('Выбрано: {0}', selected.size)}</span>
+            <button className="btn danger" disabled={busy} onClick={() => remove({ items: [...selected.values()] }, t('выбранные записи ({0})', selected.size))}>{busy ? t('Удаляю…') : t('Удалить из истории')}</button>
+            <button className="link dim" onClick={() => setSelected(new Map())}>{t('Снять выбор')}</button>
+          </div>
+        )}
     </>
   );
 }

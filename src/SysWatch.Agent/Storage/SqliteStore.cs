@@ -11,8 +11,8 @@ public sealed record SelfSample(
     double KernelPct, double DnsPct, double SamplerPct, double WriterPct, double OtherPct);
 
 /// <summary>
-/// Один SQLite-файл на день (hot\2026-10-22.db). Удаление старых данных —
-/// это удаление файла, без DELETE и VACUUM. Запись — одной транзакцией за интервал.
+/// Один SQLite-файл на день (hot\2026-10-22.db). Запись — одной транзакцией за интервал.
+/// Старые дни сначала облегчаются (без сетевых подробностей), потом удаляются целиком.
 /// </summary>
 public sealed class SqliteStore(IOptions<AgentOptions> options, ILogger<SqliteStore> log) : IDisposable
 {
@@ -144,10 +144,17 @@ public sealed class SqliteStore(IOptions<AgentOptions> options, ILogger<SqliteSt
         return id;
     }
 
+    private DateTime _lastMaintenance = DateTime.MinValue;
+
     private void EnsureOpen()
     {
         var today = DateOnly.FromDateTime(DateTime.Now);
-        if (_conn is not null && today == _day) return;
+        if (_conn is not null && today == _day)
+        {
+            // Срок хранения меняют в окне SysWatch — подхватываем раз в час, не дожидаясь смены дня.
+            if (DateTime.UtcNow - _lastMaintenance > TimeSpan.FromHours(1)) ApplyRetention(options.Value.DataDir, today);
+            return;
+        }
 
         CloseConnection();
         var dir = options.Value.DataDir;
@@ -206,22 +213,112 @@ public sealed class SqliteStore(IOptions<AgentOptions> options, ILogger<SqliteSt
         }
     }
 
+    /// <summary>
+    /// Срок хранения: из настроек окна (C:\ProgramData\SysWatch\settings.json), иначе из appsettings.
+    /// retentionDays — сколько дней хранить вообще; detailDays — сколько дней хранить сетевые подробности
+    /// (соединения, DNS, видеокарта по процессам). Старше detailDays файл «облегчается»: остаются поминутные
+    /// данные процессов и системы, а это основная часть отчётов и графиков.
+    /// </summary>
+    private (int Retention, int Detail) Limits()
+    {
+        int retention = options.Value.RetentionDays, detail = options.Value.DetailDays;
+        try
+        {
+            var file = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "SysWatch", "settings.json");
+            if (File.Exists(file))
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(file));
+                if (doc.RootElement.TryGetProperty("retentionDays", out var r) && r.TryGetInt32(out var rv)) retention = rv;
+                if (doc.RootElement.TryGetProperty("detailDays", out var d) && d.TryGetInt32(out var dv)) detail = dv;
+            }
+        }
+        catch (Exception ex) { log.LogWarning(ex, "Retention: cannot read settings.json"); }
+        retention = Math.Clamp(retention, 1, 3650);
+        return (retention, Math.Clamp(detail, 1, retention));
+    }
+
     private void ApplyRetention(string dir, DateOnly today)
     {
-        var cutoff = today.AddDays(-Math.Max(1, options.Value.RetentionDays));
+        _lastMaintenance = DateTime.UtcNow;
+        var (retention, detail) = Limits();
+        var cutoff = today.AddDays(-retention);
+        var thinBefore = today.AddDays(-detail);
         foreach (var file in Directory.EnumerateFiles(dir, "*.db"))
         {
-            if (!DateOnly.TryParseExact(Path.GetFileNameWithoutExtension(file), "yyyy-MM-dd", out var d) || d >= cutoff)
+            if (!DateOnly.TryParseExact(Path.GetFileNameWithoutExtension(file), "yyyy-MM-dd", out var d) || d >= thinBefore)
                 continue;
-            try
+            if (d < cutoff)
             {
-                File.Delete(file);
-                File.Delete(file + "-wal");
-                File.Delete(file + "-shm");
-                log.LogInformation("Retention: removed {File}", Path.GetFileName(file));
+                try
+                {
+                    File.Delete(file);
+                    File.Delete(file + "-wal");
+                    File.Delete(file + "-shm");
+                    log.LogInformation("Retention: removed {File}", Path.GetFileName(file));
+                }
+                catch (Exception ex) { log.LogWarning(ex, "Retention: cannot remove {File}", file); }
             }
-            catch (Exception ex) { log.LogWarning(ex, "Retention: cannot remove {File}", file); }
+            else Thin(file);
         }
+    }
+
+    /// <summary>Убрать из старого дня сетевые подробности и сжать файл. Помечается user_version=1, повторно не трогается.</summary>
+    private void Thin(string file)
+    {
+        try
+        {
+            using var c = new SqliteConnection(new SqliteConnectionStringBuilder
+            {
+                DataSource = file, Mode = SqliteOpenMode.ReadWrite, Pooling = false, DefaultTimeout = 5,
+            }.ToString());
+            c.Open();
+            using (var check = c.CreateCommand())
+            {
+                check.CommandText = "PRAGMA user_version";
+                if (Convert.ToInt64(check.ExecuteScalar()) >= 1) return;
+            }
+            long before = new FileInfo(file).Length;
+            var tables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            using (var list = c.CreateCommand())
+            {
+                list.CommandText = "SELECT name FROM sqlite_master WHERE type='table'";
+                using var r = list.ExecuteReader();
+                while (r.Read()) tables.Add(r.GetString(0));
+            }
+            using (var tx = c.BeginTransaction())
+            {
+                // Файлы старых версий агента могут не иметь части таблиц (например, gpu_proc_1m).
+                foreach (var t in new[] { "conn_1m", "dns", "gpu_proc_1m" })
+                {
+                    if (!tables.Contains(t)) continue;
+                    using var del = c.CreateCommand();
+                    del.Transaction = tx;
+                    del.CommandText = $"DELETE FROM {t}";
+                    del.ExecuteNonQuery();
+                }
+                if (tables.Contains("process"))
+                {
+                    using var upd = c.CreateCommand();
+                    upd.Transaction = tx;
+                    upd.CommandText = "UPDATE process SET cmdline = NULL";
+                    upd.ExecuteNonQuery();
+                }
+                tx.Commit();
+            }
+            using (var mark = c.CreateCommand())
+            {
+                mark.CommandText = "PRAGMA user_version = 1";
+                mark.ExecuteNonQuery();
+            }
+            using (var vac = c.CreateCommand())
+            {
+                vac.CommandText = "PRAGMA wal_checkpoint(TRUNCATE); VACUUM;";
+                vac.ExecuteNonQuery();
+            }
+            c.Close();
+            log.LogInformation("Retention: thinned {File} {Before} -> {After} bytes", Path.GetFileName(file), before, new FileInfo(file).Length);
+        }
+        catch (Exception ex) { log.LogWarning(ex, "Retention: cannot thin {File}", file); }
     }
 
     private SqliteCommand Cmd(string sql, int paramCount)

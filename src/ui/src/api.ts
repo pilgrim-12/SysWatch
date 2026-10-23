@@ -375,7 +375,51 @@ export type CrashKind = 'gpu' | 'bsod' | 'power' | 'app' | 'hang' | 'disk' | 'ha
 export interface Crash { ts: number; kind: CrashKind; title: string; detail: string; app: string | null; source: string; eventId: number }
 export interface CrashList { days: number; items: Crash[]; counts: Partial<Record<CrashKind, number>> }
 
+
+// ── Обзор и отчёты ──
+
+export interface Finding { id: string; severity: 'critical' | 'warn' | 'info'; title: string; detail: string; action: string; actionLabel: string; penalty: number }
+export interface HealthFacts {
+  agentRunning: boolean; agentCpu: number | null; cpuAvg: number; memAvg: number; memPeak: number;
+  systemDrive: string | null; driveFree: number; driveTotal: number; uptimeSeconds: number;
+  slowdowns7d: number; crashes7d: number; anomalies7d: number; gpuPeakTemp: number | null; dataHours: number;
+}
+export interface HealthReport { ts: number; score: number; grade: string; gradeKey: 'great' | 'good' | 'fair' | 'poor'; findings: Finding[]; facts: HealthFacts; points: { ts: number; cpu: number | null; mem: number | null }[] }
+export interface ReportTemplate { id: string; title: string; description: string; defaultDays: number; hasPeriod: boolean }
+export interface ReportDocView { template: string; title: string; html: string }
+export interface ReportSchedule { template: string; every: 'off' | 'day' | 'week'; format: 'html' | 'pdf'; lastRun: number }
+export interface ExportResult { ok: boolean; message: string; path: string | null }
+
+export interface AlertSettings { enabled: boolean; cpuPct: number; memPct: number; minutes: number; diskFreePct: number; gpuTemp: number }
+export interface AiSettings { enabled: boolean; url: string; model: string }
+export interface StorageInfo { dir: string; bytes: number; days: number; oldest: number | null; avgDayBytes: number }
+export interface SettingsView { retentionDays: number; detailDays: number; alerts: AlertSettings; ai: AiSettings; storage: StorageInfo }
+export interface SettingsUpdate { retentionDays?: number; detailDays?: number; alerts?: AlertSettings; ai?: AiSettings }
+export interface AiModels { ok: boolean; message: string; models: string[] }
+export interface AiAnswer { ok: boolean; text: string; model: string | null }
+export interface UpdateItem { name: string; id: string; version: string; available: string; source: string }
+export interface UpdateJob { running: boolean; current: string | null; done: string[]; failed: string[]; log: string | null }
+export interface UpdatesView { available: boolean; error: string | null; checkedAt: number; items: UpdateItem[]; job: UpdateJob; checking: boolean }
+
+/** Текст ошибки сервера без кода: «400 "Адрес…"» → «Адрес…». */
+export const errorText = (e: unknown) => {
+  const m = String((e as Error)?.message ?? e).replace(/^\d{3}\s+/, '');
+  try { const v = JSON.parse(m); return typeof v === 'string' ? v : m; } catch { return m; }
+};
+
 export const api = {
+  settings: () => get<SettingsView>('/api/settings'),
+  saveSettings: (u: SettingsUpdate) => postBody<SettingsView>('/api/settings', u),
+  aiModels: (url?: string) => get<AiModels>(`/api/ai/models${url ? `?url=${encodeURIComponent(url)}` : ''}`),
+  aiExplain: () => postJson<AiAnswer>('/api/ai/explain'),
+  updates: (refresh = false) => get<UpdatesView>(`/api/updates${refresh ? '?refresh=1' : ''}`),
+  installUpdates: (ids: string[]) => postBody<boolean>('/api/updates/install', ids),
+  health: (refresh = false) => get<HealthReport>(`/api/health${refresh ? '?refresh=1' : ''}`),
+  reportTemplates: () => get<ReportTemplate[]>('/api/report/templates'),
+  reportDoc: (template: string, days: number) => get<ReportDocView>(`/api/report/doc?template=${template}&days=${days}`),
+  reportSchedules: () => get<ReportSchedule[]>('/api/report/schedules'),
+  saveReportSchedules: (list: ReportSchedule[]) => postBody<ReportSchedule[]>('/api/report/schedules', list),
+  reportFolder: () => postJson<boolean>('/api/report/folder'),
   setLanguage: (l: string) => postJson<boolean>(`/api/settings/lang?value=${l}`),
   gpu: (range: number) => get<GpuView>(`/api/gpu?range=${range}`),
   crashes: (days: number) => get<CrashList>(`/api/system/crashes?days=${days}`),
@@ -391,7 +435,7 @@ export const api = {
   deleteNodeModules: (path: string) => postJson<ActionResult>(`/api/dev/node-modules?path=${encodeURIComponent(path)}`),
   devOpen: (path: string) => postJson<ActionResult>(`/api/dev/open?path=${encodeURIComponent(path)}`),
   report: (days: number) => get<Report>(`/api/report?days=${days}`),
-  reportExport: (days: number) => postJson<{ ok: boolean; path: string }>(`/api/report/export?days=${days}`),
+  reportExport: (template: string, days: number, format: 'html' | 'pdf') => postJson<ExportResult>(`/api/report/export?template=${template}&days=${days}&format=${format}`),
   why: (from: number, to: number) => get<Why>(`/api/why?from=${from}&to=${to}`),
   slowdowns: (range: number) => get<Why[]>(`/api/slowdowns?range=${range}`),
   live: () => get<Live>('/api/live'),

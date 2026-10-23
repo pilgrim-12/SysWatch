@@ -621,6 +621,32 @@ function programs() {
   };
 }
 
+function healthMock() {
+  const t0 = now() - 86400;
+  const points = Array.from({ length: 144 }, (_, i) => ({ ts: t0 + i * 600, cpu: Math.round(8 + 40 * noise(i / 7) ** 2), mem: Math.round(55 + 20 * noise(i / 30 + 3)) }));
+  return {
+    ts: now() - 40, score: 71, grade: 'Нормально', gradeKey: 'fair',
+    findings: [
+      { id: 'space-C', severity: 'warn', title: 'Мало места на диске C:', detail: 'Свободно 18,4 ГБ из 237 ГБ (8%). Когда место кончится, Windows начнёт тормозить и перестанет ставить обновления.', action: '#disk', actionLabel: 'Освободить место', penalty: 15 },
+      { id: 'power', severity: 'warn', title: 'Внезапных выключений за неделю: 1', detail: 'Компьютер выключился без завершения работы — пропало питание или зависание.', action: '#system', actionLabel: 'Сбои', penalty: 8 },
+      { id: 'slow', severity: 'info', title: 'Перегрузки за неделю: 2', detail: 'Чаще всего виноват chrome. Разбор каждого эпизода — в отчёте «Неделя».', action: '#report', actionLabel: 'Почему тормозило', penalty: 5 },
+      { id: 'dev-eol', severity: 'info', title: 'Компонентов без поддержки: 2', detail: '.NET 6.0, Node.js 16 больше не получают исправлений безопасности.', action: '#dev', actionLabel: 'Разработка', penalty: 4 },
+    ],
+    facts: { agentRunning: true, agentCpu: 0.04, cpuAvg: 17.3, memAvg: 63.1, memPeak: 88.4, systemDrive: 'C:\\', driveFree: 18.4e9, driveTotal: 237e9, uptimeSeconds: 3 * 86400 + 5 * 3600, slowdowns7d: 2, crashes7d: 1, anomalies7d: 3, gpuPeakTemp: 71, dataHours: 160 },
+    points,
+  };
+}
+
+const TEMPLATES = [
+  { id: 'health', title: 'Здоровье ПК', description: 'Оценка, проблемы и что с ними делать', defaultDays: 7, hasPeriod: false },
+  { id: 'week', title: 'Неделя', description: 'Нагрузка, кто грузил, перегрузки', defaultDays: 7, hasPeriod: true },
+  { id: 'security', title: 'Безопасность', description: 'Автозагрузка, брандмауэр, аномалии', defaultDays: 7, hasPeriod: true },
+  { id: 'network', title: 'Сеть', description: 'Трафик, страны, новые адреса', defaultDays: 7, hasPeriod: true },
+  { id: 'dev', title: 'Разработка', description: 'SDK, версии, устаревшее', defaultDays: 7, hasPeriod: false },
+];
+const schedules = [{ template: 'health', every: 'week', format: 'pdf', lastRun: now() - 3 * 86400 }];
+const docHtml = (t: string) => `<!doctype html><html><body style="font:14px Segoe UI,sans-serif;color:#1b2533;padding:24px 32px"><h1>${TEMPLATES.find(x => x.id === t)?.title}</h1><p style="color:#667">Компьютер ANTRARES · 16–23 октября 2026</p><h2>Итог</h2><p>Оценка 71 из 100. Найдено 4 проблемы.</p><table border=1 cellpadding=6 style="border-collapse:collapse"><tr><th>Проверка</th><th>Результат</th></tr><tr><td>Место</td><td>8% свободно</td></tr><tr><td>Сбои</td><td>1</td></tr></table></body></html>`;
+
 export function mockApi(req: IncomingMessage, res: ServerResponse, next: () => void) {
   if (!req.url?.startsWith('/api/')) return next();
   const u = new URL(req.url, 'http://x');
@@ -646,7 +672,22 @@ export function mockApi(req: IncomingMessage, res: ServerResponse, next: () => v
       case '/api/history/pending': return ['Edge'];
       case '/api/history': return historyMock(Number(u.searchParams.get('days') ?? 7), u.searchParams.get('q') ?? '', u.searchParams.get('source') ?? '', u.searchParams.get('kind') ?? '');
       case '/api/report': return reportMock(Number(u.searchParams.get('days') ?? 7));
-      case '/api/report/export': return { ok: true, path: 'C:\\Users\\ANTRARES\\Documents\\SysWatch\\Отчёт SysWatch 2026-10-16 — 2026-10-23 10-40.html' };
+      case '/api/settings': return { retentionDays: 90, detailDays: 30, alerts: { enabled: true, cpuPct: 90, memPct: 90, minutes: 5, diskFreePct: 10, gpuTemp: 85 }, ai: { enabled: true, url: 'http://localhost:11434', model: 'llama3.2:3b' }, storage: { dir: 'C:\\ProgramData\\SysWatch\\hot', bytes: 412e6, days: 7, oldest: now() - 6 * 86400, avgDayBytes: 58e6 } };
+      case '/api/ai/models': return { ok: true, message: 'Ollama работает, моделей: 2', models: ['llama3.2:3b', 'qwen2.5:7b'] };
+      case '/api/ai/explain': return { ok: true, model: 'llama3.2:3b', text: 'В целом компьютер в нормальном состоянии, но есть две вещи, которые стоит сделать.\n\nГлавное — место на диске C: осталось 8%. Удалите ненужные файлы в разделе «Диск», иначе Windows начнёт тормозить.\n\nНа этой неделе компьютер один раз выключился без завершения работы. Если это повторится — проверьте питание.' };
+      case '/api/updates': return { available: true, error: null, checkedAt: now() - 300, checking: false, items: [
+        { name: 'Google Chrome', id: 'Google.Chrome', version: '129.0.6668.90', available: '130.0.6723.70', source: 'winget' },
+        { name: 'Visual Studio Code', id: 'Microsoft.VisualStudioCode', version: '1.94.0', available: '1.95.1', source: 'winget' },
+        { name: 'Node.js LTS', id: 'OpenJS.NodeJS.LTS', version: '20.17.0', available: '22.11.0', source: 'winget' },
+        { name: 'Docker Desktop', id: 'Docker.DockerDesktop', version: '4.33.1', available: '4.35.1', source: 'winget' },
+      ], job: { running: true, current: 'Google.Chrome', done: ['7zip.7zip'], failed: [], log: null } };
+      case '/api/updates/install': return true;
+      case '/api/health': return healthMock();
+      case '/api/report/templates': return TEMPLATES;
+      case '/api/report/doc': { const t = u.searchParams.get('template') ?? 'health'; return { template: t, title: t, html: docHtml(t) }; }
+      case '/api/report/schedules': return schedules;
+      case '/api/report/folder': return true;
+      case '/api/report/export': return { ok: true, message: 'Сохранено', path: 'C:\\Users\\ANTRARES\\Documents\\SysWatch\\Отчёт SysWatch 2026-10-16 — 2026-10-23 10-40.html' };
       case '/api/why': { const f = Number(u.searchParams.get('from')); return whyMock(f, Number(u.searchParams.get('to')), 'none'); }
       case '/api/system/startup': return [
         { id: 'a', name: 'Telegram Desktop', where: 'Для этого пользователя', command: '"C:\\Users\\ANTRARES\\AppData\\Roaming\\Telegram Desktop\\Telegram.exe" -autostart', path: 'C:\\Telegram.exe', enabled: true, signature: 'signed', signer: 'Telegram FZ-LLC', canToggle: true },

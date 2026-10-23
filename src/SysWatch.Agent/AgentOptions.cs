@@ -26,6 +26,9 @@ public sealed class AgentOptions
     /// <summary>Как часто опрашивать видеокарту.</summary>
     public int GpuIntervalSeconds { get; set; } = 5;
 
-    /// <summary>Сколько дней хранить дневные файлы.</summary>
-    public int RetentionDays { get; set; } = 7;
+    /// <summary>Сколько дней хранить дневные файлы (окно может переопределить в settings.json).</summary>
+    public int RetentionDays { get; set; } = 90;
+
+    /// <summary>Сколько дней хранить сетевые подробности (соединения, DNS); дальше файл дня облегчается.</summary>
+    public int DetailDays { get; set; } = 30;
 }

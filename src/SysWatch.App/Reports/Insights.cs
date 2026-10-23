@@ -268,6 +268,9 @@ public sealed class Insights(DayFiles files, AnomalyStore anomalies, DiskService
             Math.Max(0, (v.Cpu - CpuBusy) / (100 - CpuBusy)) + Math.Max(0, (v.Mem - MemBusy) / (100 - MemBusy)) + 0.5;
     }
 
+    /// <summary>Сколько было эпизодов перегрузки — без разбора каждого (дёшево).</summary>
+    public int CountSlowdowns(long from, long to) => Episodes(SystemRows(from, to)).Count;
+
     public IReadOnlyList<Why> SlowDowns(long from, long to, int max = 12)
     {
         var sys = SystemRows(from, to);

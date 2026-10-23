@@ -47,6 +47,7 @@ export const RANGES = [
   { minutes: 360, label: t('6 часов') },
   { minutes: 1440, label: t('Сутки') },
   { minutes: 10080, label: t('Неделя') },
+  { minutes: 43200, label: t('Месяц') },
 ] as const;
 
 /** Цвет ресурса одинаков на всех экранах: это часть языка интерфейса. */

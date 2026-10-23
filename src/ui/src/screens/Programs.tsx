@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
+import { Updates } from '../components/Updates';
 import { api, type ProgramRow } from '../api';
 import { useLoad, useSort } from '../hooks';
 import { ago, bytes, dayTime } from '../format';
 import { t } from '../i18n';
 
-type Filter = 'unused' | 'all' | 'runtime';
+type Filter = 'unused' | 'all' | 'runtime' | 'updates';
 type Key = 'name' | 'lastUsed' | 'installed' | 'size';
 
 const DAY = 86400;
@@ -14,6 +15,7 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: 'unused', label: t('Не запускались {0}+ дней', UNUSED_DAYS) },
   { key: 'all', label: t('Все программы') },
   { key: 'runtime', label: t('Библиотеки и драйверы') },
+  { key: 'updates', label: t('Обновления') },
 ];
 
 const SOURCE: Record<string, string> = {
@@ -89,6 +91,7 @@ export function Programs() {
         </div>
       </div>
 
+      {filter === 'updates' ? <Updates /> : <>
       <div className="panel scroll" style={{ maxHeight: 'calc(100vh - 400px)', minHeight: 300 }}>
         {!rows.length ? <div className="empty">{list.loading ? t('Собираю список программ…') : t('Под этот фильтр ничего нет.')}</div> : (
           <table className="table">
@@ -141,6 +144,7 @@ export function Programs() {
       <p className="dim" style={{ marginTop: 10, fontSize: 13, color: 'var(--muted)' }}>
         {t('«Удалить» запускает штатный деинсталлятор программы — дальше всё подтверждается в его окне, как при удалении через «Параметры».')}
       </p>
+      </>}
     </>
   );
 }

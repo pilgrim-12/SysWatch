@@ -87,7 +87,7 @@ export function Now({ live, onApp }: { live: Live | null; onApp: (name: string) 
                     <th {...thProps('name')}>{t('Программа')}</th>
                     <th {...thProps('cpu')}>{t('Процессор')}</th>
                     <th {...thProps('mem')}>{t('Память')}</th>
-                    <th {...thProps('io')}>{t('Диск')}</th>
+                    <th {...thProps('io')} title={t('Скорость чтения и записи на диск, а не занятое место')}>{t('Чтение/запись')}</th>
                   </tr>
                 </thead>
                 <tbody>

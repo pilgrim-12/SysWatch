@@ -3,7 +3,7 @@ import { api, type Live } from './api';
 import { ago, bytes, pct } from './format';
 import { LANGS, lang, setLang, t, type Lang } from './i18n';
 import { Scopes, emptyHistory, pushLive, type LiveHistory } from './components/Scopes';
-import { BrandMark, IconAlert, IconApps, IconChip, IconDisk, IconHeat, IconLink, IconList, IconNet, IconClock, IconCode, IconGpu, IconPulse, IconReport } from './components/Icons';
+import { BrandMark, IconAlert, IconApps, IconChip, IconDisk, IconHeat, IconLink, IconList, IconNet, IconClock, IconCode, IconGpu, IconPulse, IconReport, IconGauge, IconGear } from './components/Icons';
 import { Now } from './screens/Now';
 import { Timeline } from './screens/Timeline';
 import { Network } from './screens/Network';
@@ -18,10 +18,13 @@ import { Report } from './screens/Report';
 import { Dev } from './screens/Dev';
 import { History } from './screens/History';
 import { Gpu } from './screens/Gpu';
+import { Overview } from './screens/Overview';
+import { Settings } from './screens/Settings';
 
-type Screen = 'now' | 'connections' | 'timeline' | 'network' | 'anomalies' | 'disk' | 'programs' | 'system' | 'gpu' | 'report' | 'dev' | 'history' | 'events';
+type Screen = 'overview' | 'now' | 'connections' | 'timeline' | 'network' | 'anomalies' | 'disk' | 'programs' | 'system' | 'gpu' | 'report' | 'dev' | 'history' | 'events' | 'settings';
 
 const NAV: { key: Screen; label: string; icon: () => JSX.Element }[] = [
+  { key: 'overview', label: t('Обзор'), icon: IconGauge },
   { key: 'now', label: t('Сейчас'), icon: IconPulse },
   { key: 'connections', label: t('Соединения'), icon: IconLink },
   { key: 'timeline', label: t('Таймлайн'), icon: IconHeat },
@@ -33,8 +36,9 @@ const NAV: { key: Screen; label: string; icon: () => JSX.Element }[] = [
   { key: 'gpu', label: t('Видеокарта'), icon: IconGpu },
   { key: 'dev', label: t('Разработка'), icon: IconCode },
   { key: 'history', label: t('История'), icon: IconClock },
-  { key: 'report', label: t('Отчёт'), icon: IconReport },
+  { key: 'report', label: t('Отчёты'), icon: IconReport },
   { key: 'events', label: t('События'), icon: IconList },
+  { key: 'settings', label: t('Настройки'), icon: IconGear },
 ];
 
 function readPref<T>(key: string, fallback: T): T {
@@ -51,7 +55,12 @@ function switchLang(l: Lang) {
 }
 
 export function App() {
-  const [screen, setScreen] = useState<Screen>(() => readPref('screen', 'now'));
+  const [screen, setScreen] = useState<Screen>(() => {
+    // Первый запуск новой версии открывает «Обзор», дальше — последний раздел.
+    let first = false;
+    try { first = !localStorage.getItem('overview_seen'); localStorage.setItem('overview_seen', '1'); } catch { /* нет хранилища */ }
+    return first ? 'overview' : readPref('screen', 'overview');
+  });
   const [range, setRange] = useState<number>(() => readPref('range', 60));
   const [app, setApp] = useState<string | null>(null);
   const [live, setLive] = useState<Live | null>(null);
@@ -137,6 +146,10 @@ export function App() {
           {liveError && !live && <div className="error">{t('Нет связи с SysWatch: {0}', liveError)}</div>}
           {app ? (
             <AppDetail name={app} range={range} setRange={setRange} onBack={() => setApp(null)} />
+          ) : screen === 'settings' ? (
+            <Settings />
+          ) : screen === 'overview' ? (
+            <Overview />
           ) : screen === 'now' ? (
             <Now live={live} onApp={setApp} />
           ) : screen === 'timeline' ? (

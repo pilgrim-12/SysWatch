@@ -9,13 +9,15 @@ using SysWatch.App.Disk;
 using SysWatch.App.Programs;
 using SysWatch.App.Reports;
 using SysWatch.App.Sampling;
+using SysWatch.App.Settings;
 using SysWatch.App.Sys;
 
 namespace SysWatch.App;
 
 /// <summary>Маршрутизатор /api/* для интерфейса. Возвращает (код, JSON).</summary>
 public sealed class Api(Queries queries, LiveSampler live, AnomalyStore anomalies, DiskService disk, Connections connections,
-    Installed programs, Firewall firewall, GeoIp geo, Startup startup, Hardware hardware, Insights insights, DevEnv dev, BrowserHistory history, GpuQueries gpu)
+    Installed programs, Firewall firewall, GeoIp geo, Startup startup, Hardware hardware, Insights insights, DevEnv dev, BrowserHistory history, GpuQueries gpu,
+    Health health, ReportCenter reports, AppSettings settings, LocalAi ai, Updates updates)
 {
     private static readonly JsonSerializerOptions Json = new()
     {
@@ -124,6 +126,48 @@ public sealed class Api(Queries queries, LiveSampler live, AnomalyStore anomalie
                     anomalies.Set("ui_lang", L.Default);
                     return (200, "true");
 
+                case "/api/settings" when method == "GET":
+                    return (200, Serialize(settings.View()));
+                case "/api/settings" when method == "POST":
+                    try
+                    {
+                        var upd = JsonSerializer.Deserialize<SettingsUpdate>(body ?? "{}", Json) ?? new SettingsUpdate(null, null, null, null);
+                        return (200, Serialize(settings.Save(upd)));
+                    }
+                    catch (InvalidOperationException ex) { return (400, JsonSerializer.Serialize(ex.Message)); }
+
+                case "/api/ai/models" when method == "GET":
+                    return (200, Serialize(await ai.Models(q["url"])));
+                case "/api/ai/explain" when method == "POST":
+                {
+                    HealthReport report;
+                    await _history.WaitAsync();
+                    try { report = health.Get(); }
+                    finally { _history.Release(); }
+                    return (200, Serialize(await ai.Explain(report))); // модель думает долго — вне блокировки
+                }
+
+                case "/api/updates" when method == "GET":
+                {
+                    var v = updates.Get(q["refresh"] == "1");
+                    return (200, Serialize(new { v.Available, v.Error, v.CheckedAt, v.Items, v.Job, updates.Checking }));
+                }
+                case "/api/updates/install" when method == "POST":
+                {
+                    var ids = JsonSerializer.Deserialize<string[]>(body ?? "[]", Json) ?? [];
+                    return (200, Serialize(updates.Install(ids)));
+                }
+
+                case "/api/report/schedules" when method == "GET":
+                    return (200, Serialize(reports.Schedules()));
+                case "/api/report/schedules" when method == "POST":
+                    reports.SaveSchedules(JsonSerializer.Deserialize<List<ReportSchedule>>(body ?? "[]", Json) ?? []);
+                    return (200, Serialize(reports.Schedules()));
+                case "/api/report/folder" when method == "POST":
+                    Directory.CreateDirectory(ReportCenter.Folder);
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{ReportCenter.Folder}\"") { UseShellExecute = false });
+                    return (200, "true");
+
                 case "/api/report/open" when method == "POST":
                     return (200, Serialize(OpenFile(q["path"] ?? "")));
 
@@ -164,6 +208,19 @@ public sealed class Api(Queries queries, LiveSampler live, AnomalyStore anomalie
                 case "/api/disk/cancel" when method == "POST":
                     disk.Cancel();
                     return (200, "true");
+                case "/api/report/doc":
+                case "/api/report/export" when method == "POST":
+                {
+                    // Сборка отчёта — под общей блокировкой (кэши запросов не потокобезопасны),
+                    // а долгие части (обход SDK, печать PDF через Edge) — вне её, чтобы не стояли графики.
+                    var template = q["template"] ?? (uri.AbsolutePath == "/api/report/doc" ? "health" : "week");
+                    reports.WarmUp(template);
+                    ReportDocView view;
+                    await _history.WaitAsync();
+                    try { view = reports.Build(template, Days(q["days"])); }
+                    finally { _history.Release(); }
+                    return (200, Serialize(uri.AbsolutePath == "/api/report/doc" ? (object)view : reports.Save(view, q["format"] ?? "html", open: true)));
+                }
                 case "/api/disk/clean" when method == "POST":
                 {
                     var req = JsonSerializer.Deserialize<CleanRequest>(body ?? "{}", Json) ?? new CleanRequest([], []);
@@ -183,7 +240,8 @@ public sealed class Api(Queries queries, LiveSampler live, AnomalyStore anomalie
                     "/api/events" => queries.Events(range),
                     "/api/gpu" => gpu.Get(range),
                     "/api/report" => BuildReport(q["days"]),
-                    "/api/report/export" when method == "POST" => Export(q["days"]),
+                    "/api/report/templates" => reports.Templates(),
+                    "/api/health" => health.Get(q["refresh"] == "1"),
                     "/api/why" => insights.Explain(ToLong(q["from"]), ToLong(q["to"])),
                     "/api/slowdowns" => insights.SlowDowns(DateTimeOffset.UtcNow.ToUnixTimeSeconds() - range * 60L, DateTimeOffset.UtcNow.ToUnixTimeSeconds()),
                     _ => null,
@@ -209,12 +267,7 @@ public sealed class Api(Queries queries, LiveSampler live, AnomalyStore anomalie
         return insights.Build(from, to);
     }
 
-    private ExportResult Export(string? days)
-    {
-        var path = ReportHtml.Save(BuildReport(days));
-        OpenFile(path);
-        return new ExportResult(true, path);
-    }
+    private static int Days(string? s) => Math.Clamp(int.TryParse(s, out var d) ? d : 7, 1, 31);
 
     /// <summary>
     /// Открыть файл программой по умолчанию. Через explorer.exe, а не напрямую: окно SysWatch работает
@@ -228,8 +281,6 @@ public sealed class Api(Queries queries, LiveSampler live, AnomalyStore anomalie
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{path}\"") { UseShellExecute = false });
         return new(true, L.T("Открыто."));
     }
-
-    private sealed record ExportResult(bool Ok, string Path);
 
     private sealed record CleanRequest(string[]? Categories, string[]? Exclude);
 

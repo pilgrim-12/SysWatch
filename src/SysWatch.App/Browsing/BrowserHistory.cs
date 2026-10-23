@@ -45,6 +45,12 @@ public sealed class BrowserHistory(AnomalyStore state)
     private readonly object _gate = new();
     private (long At, int Days, List<HistoryItem> Items, List<BrowserProfile> Profiles)? _cache;
 
+    /// <summary>
+    /// Прочитанное по каждой базе браузера + «отпечаток» файла (размер и время записи базы и её журнала).
+    /// Пока браузер не менял файл, повторно его не копируем — копия базы Chrome бывает в сотни мегабайт.
+    /// </summary>
+    private readonly Dictionary<string, (string Stamp, long FromUnix, List<HistoryItem> Items)> _dbCache = new(StringComparer.OrdinalIgnoreCase);
+
     private sealed record Source(string Browser, string UserData, bool SingleProfile);
 
     private static IEnumerable<Source> ChromiumSources() =>
@@ -111,16 +117,15 @@ public sealed class BrowserHistory(AnomalyStore state)
     /// <summary>Забыть прочитанное (при закрытии окна), чтобы история не лежала в памяти.</summary>
     public void Clear()
     {
-        lock (_gate) _cache = null;
+        lock (_gate) { _cache = null; _dbCache.Clear(); }
     }
 
-    private static (List<HistoryItem>, List<BrowserProfile>) Load(int days)
+    private (List<HistoryItem>, List<BrowserProfile>) Load(int days)
     {
         var items = new List<HistoryItem>();
         var profiles = new List<BrowserProfile>();
         long fromUnix = DateTimeOffset.UtcNow.ToUnixTimeSeconds() - days * 86400L;
         var tmp = Path.Combine(Path.GetTempPath(), "SysWatch-history-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(tmp);
 
         try
         {
@@ -156,8 +161,11 @@ public sealed class BrowserHistory(AnomalyStore state)
         }
         finally
         {
-            try { Directory.Delete(tmp, true); } catch (Exception) { /* удалит Windows при очистке TEMP */ }
-            SqliteConnection.ClearAllPools();
+            if (Directory.Exists(tmp))
+            {
+                try { Directory.Delete(tmp, true); } catch (Exception) { /* удалит Windows при очистке TEMP */ }
+                SqliteConnection.ClearAllPools();
+            }
         }
 
         return (items, profiles);
@@ -165,9 +173,32 @@ public sealed class BrowserHistory(AnomalyStore state)
 
     private delegate void Reader(SqliteConnection c, string label, long fromUnix, List<HistoryItem> into);
 
-    private static BrowserProfile Read(string label, string browser, string profile, string db, string tmp, long fromUnix,
+    private static string Stamp(string db)
+    {
+        var parts = new List<string>();
+        foreach (var f in new[] { db, db + "-wal", db + "-journal" })
+        {
+            var fi = new FileInfo(f);
+            parts.Add(fi.Exists ? $"{fi.Length}:{fi.LastWriteTimeUtc.Ticks}" : "-");
+        }
+        return string.Join("|", parts);
+    }
+
+    private BrowserProfile Read(string label, string browser, string profile, string db, string tmp, long fromUnix,
         List<HistoryItem> items, Reader reader)
     {
+        string stamp;
+        try { stamp = Stamp(db); } catch (Exception) { stamp = Guid.NewGuid().ToString("N"); }
+
+        // Файл не менялся и прочитан за не меньший период — берём из памяти, без копирования.
+        if (_dbCache.TryGetValue(db, out var hit) && hit.Stamp == stamp && hit.FromUnix <= fromUnix)
+        {
+            var mine0 = hit.Items.Where(i => i.Ts >= fromUnix).ToList();
+            items.AddRange(mine0);
+            return new BrowserProfile(label, browser, profile, true, null, mine0.Count(i => i.Kind == "visit"), mine0.Count(i => i.Kind == "search"), db);
+        }
+
+        Directory.CreateDirectory(tmp);
         var copy = Path.Combine(tmp, Guid.NewGuid().ToString("N") + ".db");
         try
         {
@@ -182,6 +213,7 @@ public sealed class BrowserHistory(AnomalyStore state)
                 reader(c, label, fromUnix, items);
             }
             var mine = items.Skip(before).ToList();
+            _dbCache[db] = (stamp, fromUnix, mine);
             return new BrowserProfile(label, browser, profile, true, null, mine.Count(i => i.Kind == "visit"), mine.Count(i => i.Kind == "search"), db);
         }
         catch (IOException)
@@ -387,7 +419,7 @@ public sealed class BrowserHistory(AnomalyStore state)
             }
         }
 
-        lock (_gate) _cache = null;
+        lock (_gate) { _cache = null; _dbCache.Clear(); }
         var parts = new List<string>();
         if (deleted > 0 || deferred.Count < ops.Select(o => o.Browser).Distinct().Count())
             parts.Add(clear.Count > 0 ? L.T("История очищена, удалено посещений: {0}.", deleted) : L.T("Удалено адресов: {0}.", deleted));
@@ -430,7 +462,7 @@ public sealed class BrowserHistory(AnomalyStore state)
             done.Add(group.Key);
         }
         SavePending(left);
-        lock (_gate) _cache = null;
+        lock (_gate) { _cache = null; _dbCache.Clear(); }
         return ops > 0 ? new PendingApplied(ops, deleted, done) : null;
     }
 

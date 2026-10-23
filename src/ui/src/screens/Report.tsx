@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { api, type ReportApp } from '../api';
+import { useEffect, useMemo, useState } from 'react';
+import { api, type ReportApp, type ReportSchedule, type ReportTemplate } from '../api';
 import { useLoad } from '../hooks';
 import { COLOR, appLabel, bytes, dayTime, pct, pluralWord } from '../format';
 import { Plot } from '../components/Plot';
@@ -22,7 +22,7 @@ export const RULE_NAMES: Record<string, string> = {
   exposed_port: t('Порт открыт в сеть'),
 };
 
-export function Report({ onApp }: { onApp: (name: string) => void }) {
+function WeekReport({ onApp }: { onApp: (name: string) => void }) {
   const [days, setDays] = useState(7);
   const report = useLoad(() => api.report(days), [days]);
   const [saving, setSaving] = useState(false);
@@ -35,26 +35,22 @@ export function Report({ onApp }: { onApp: (name: string) => void }) {
     { label: t('Память'), color: COLOR.mem, values: r.points.map(p => p.mem) },
   ] : [], [r]);
 
-  const save = async () => {
+  const save = async (format: 'html' | 'pdf') => {
     setSaving(true); setSaved(null); setSaveErr(null);
-    try { const res = await api.reportExport(days); setSaved(res.path); }
+    try { const res = await api.reportExport('week', days, format); if (res.ok) setSaved(res.path); else setSaveErr(res.message); }
     catch (e) { setSaveErr(t('Не удалось сохранить: {0}', String((e as Error)?.message ?? e))); }
     finally { setSaving(false); }
   };
 
   return (
     <>
-      <div className="head">
-        <div>
-          <h1>{t('Отчёт')}</h1>
-          <p>{t('Итоги за период: когда и почему компьютер тормозил, кто больше всего потреблял, что нового появилось. Объяснения строятся по правилам из данных агента — без интернета.')}</p>
+      <div className="report-toolbar">
+        <div className="seg" role="group" aria-label={t('Период')}>
+          {PERIODS.map(p => <button key={p.days} aria-pressed={days === p.days} onClick={() => setDays(p.days)}>{p.label}</button>)}
         </div>
-        <div className="head-tools">
-          <div className="seg" role="group" aria-label={t('Период')}>
-            {PERIODS.map(p => <button key={p.days} aria-pressed={days === p.days} onClick={() => setDays(p.days)}>{p.label}</button>)}
-          </div>
-          <button className="btn" disabled={saving || !r} onClick={save}>{saving ? t('Сохраняю…') : t('Сохранить в HTML')}</button>
-        </div>
+        <span className="grow" />
+        <button className="btn" disabled={saving || !r} onClick={() => save('pdf')}>{saving ? t('Сохраняю…') : t('Сохранить PDF')}</button>
+        <button className="btn" disabled={saving || !r} onClick={() => save('html')}>{t('Сохранить HTML')}</button>
       </div>
 
       {saved && <div className="note">{t('Отчёт сохранён и открыт:')} <code>{saved}</code></div>}
@@ -174,5 +170,129 @@ function Top({ title, rows, value, color, onApp }: {
         </tbody>
       </table>
     </div>
+  );
+}
+
+// ── Центр отчётов: шаблоны, предпросмотр, выгрузка, расписание ────────────────
+
+const ICONS: Record<string, string> = { health: '♥', week: '◷', security: '⛨', network: '⇅', dev: '</>' };
+
+export function Report({ onApp }: { onApp: (name: string) => void }) {
+  const templates = useLoad(() => api.reportTemplates(), []);
+  const [tpl, setTpl] = useState<string>(() => { try { return localStorage.getItem('syswatch.report') ?? 'health'; } catch { return 'health'; } });
+  useEffect(() => { try { localStorage.setItem('syswatch.report', tpl); } catch { /* ничего */ } }, [tpl]);
+  const list = templates.data ?? [];
+  const current = list.find(x => x.id === tpl);
+
+  return (
+    <>
+      <div className="head">
+        <div>
+          <h1>{t('Отчёты')}</h1>
+          <p>{t('Готовые отчёты о компьютере: посмотреть здесь, сохранить в PDF или HTML, получать автоматически по расписанию. Всё собирается на этом компьютере, без интернета.')}</p>
+        </div>
+        <div className="head-tools">
+          <button className="btn" onClick={() => api.reportFolder()}>{t('Папка отчётов')}</button>
+        </div>
+      </div>
+
+      <div className="tpl-grid">
+        {list.map(x => (
+          <button key={x.id} className={`tpl-card ${tpl === x.id ? 'on' : ''}`} onClick={() => setTpl(x.id)}>
+            <span className="tpl-ico">{ICONS[x.id] ?? '▤'}</span>
+            <b>{x.title}</b>
+            <span>{x.description}</span>
+          </button>
+        ))}
+      </div>
+
+      {tpl === 'week' ? <WeekReport onApp={onApp} /> : current && <DocReport tpl={current} />}
+
+      <Schedules templates={list} />
+    </>
+  );
+}
+
+function DocReport({ tpl }: { tpl: ReportTemplate }) {
+  const [days, setDays] = useState(tpl.defaultDays || 7);
+  useEffect(() => setDays(tpl.defaultDays || 7), [tpl.id, tpl.defaultDays]);
+  const doc = useLoad(() => api.reportDoc(tpl.id, days), [tpl.id, days]);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  useEffect(() => setMsg(null), [tpl.id]);
+
+  const save = async (format: 'html' | 'pdf') => {
+    setBusy(true); setMsg(null);
+    try { const r = await api.reportExport(tpl.id, days, format); setMsg({ ok: r.ok, text: r.message }); }
+    catch (e) { setMsg({ ok: false, text: String((e as Error)?.message ?? e) }); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <>
+      <div className="report-toolbar">
+        {tpl.hasPeriod && (
+          <div className="seg" role="group" aria-label={t('Период')}>
+            {[1, 7, 30].map(d => <button key={d} aria-pressed={days === d} onClick={() => setDays(d)}>{d === 1 ? t('Сутки') : t('{0} дней', d)}</button>)}
+          </div>
+        )}
+        {doc.loading && <span className="dim">{t('Собираю отчёт…')}</span>}
+        <span className="grow" />
+        <button className="btn" disabled={busy || !doc.data} onClick={() => save('pdf')}>{busy ? t('Сохраняю…') : t('Сохранить PDF')}</button>
+        <button className="btn" disabled={busy || !doc.data} onClick={() => save('html')}>{t('Сохранить HTML')}</button>
+      </div>
+      {msg && <div className={msg.ok ? 'note' : 'error'}>{msg.text}</div>}
+      {doc.error && <div className="error">{t('Не удалось собрать отчёт: {0}', doc.error)}</div>}
+      <div className="panel doc-frame">
+        {doc.data
+          ? <iframe title={doc.data.title} srcDoc={doc.data.html} sandbox="" />
+          : <div className="empty">{t('Собираю отчёт…')}{tpl.id === 'dev' ? ' ' + t('Первый раз до минуты: считаются размеры папок.') : ''}</div>}
+      </div>
+    </>
+  );
+}
+
+function Schedules({ templates }: { templates: ReportTemplate[] }) {
+  const data = useLoad(() => api.reportSchedules(), []);
+  const [saving, setSaving] = useState(false);
+  const list = data.data ?? [];
+  const get = (id: string): ReportSchedule => list.find(s => s.template === id) ?? { template: id, every: 'off', format: 'pdf', lastRun: 0 };
+
+  const update = async (id: string, patch: Partial<ReportSchedule>) => {
+    const next = templates.map(x => ({ ...get(x.id), ...(x.id === id ? patch : {}) }));
+    setSaving(true);
+    try { await api.saveReportSchedules(next); data.reload(); } finally { setSaving(false); }
+  };
+
+  return (
+    <section className="block" style={{ marginTop: 28 }}>
+      <h2>{t('По расписанию')} <small>{t('SysWatch сам сохранит отчёт в папку отчётов и покажет уведомление')}</small></h2>
+      <div className="panel">
+        <table className="table dev-table">
+          <tbody>
+            {templates.map(x => {
+              const s = get(x.id);
+              return (
+                <tr key={x.id}>
+                  <td className="dev-name"><b>{x.title}</b>{s.lastRun > 0 && <div className="dim">{t('последний: {0}', dayTime(s.lastRun))}</div>}</td>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <select className="select" disabled={saving} value={s.every} onChange={e => update(x.id, { every: e.target.value as ReportSchedule['every'] })}>
+                      <option value="off">{t('выключено')}</option>
+                      <option value="day">{t('каждый день')}</option>
+                      <option value="week">{t('каждую неделю')}</option>
+                    </select>{' '}
+                    <select className="select" disabled={saving || s.every === 'off'} value={s.format} onChange={e => update(x.id, { format: e.target.value as ReportSchedule['format'] })}>
+                      <option value="pdf">PDF</option>
+                      <option value="html">HTML</option>
+                    </select>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="hint-line">{t('Отчёты делаются днём, когда компьютер включён: если в нужное время он был выключен — отчёт появится после включения.')}</p>
+    </section>
   );
 }

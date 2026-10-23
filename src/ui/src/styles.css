@@ -767,3 +767,89 @@ ul.plain li { padding: 2px 0; }
 .pending-note { display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap; }
 .lang-pick { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: auto 10px 10px; color: var(--muted); font-size: 13px; }
 .lang-pick + .rail-foot { margin-top: 0; }
+/* Панель выбора в «Истории» всегда видна внизу окна, где бы ни была прокрутка */
+.sel-bar.floating {
+  position: sticky; bottom: 16px; z-index: 5;
+  display: flex; justify-content: flex-end; gap: 16px; align-items: center;
+  width: fit-content; margin: 12px 0 0 auto; padding: 10px 14px;
+  background: var(--panel-2); border: 1px solid var(--grid); border-radius: var(--r-md);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.45); font-size: 14px;
+}
+
+/* ── Обзор ─────────────────────────────────────────────── */
+.hero { display: grid; grid-template-columns: minmax(320px, 1.1fr) 2fr; gap: 12px; margin-bottom: 24px; }
+.hero-score { display: flex; align-items: center; gap: 20px; padding: 16px 20px; }
+.score-ring { flex: none; }
+.score-num { font: 600 52px var(--font); }
+.score-of { font: 400 13px var(--font); fill: var(--muted); }
+.hero-grade { font-size: 26px; font-weight: 600; line-height: 1.1; }
+.hero-sum { margin: 6px 0 10px; color: var(--muted); max-width: 34ch; }
+.hero-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.hero-fact { padding: 12px 14px; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+.hero-fact b { font-size: 22px; font-weight: 600; line-height: 1.15; }
+.hero-fact span { color: var(--muted); font-size: 13px; }
+@media (max-width: 1100px) { .hero { grid-template-columns: 1fr; } }
+
+.findings { display: flex; flex-direction: column; gap: 8px; }
+.finding {
+  display: flex; align-items: center; gap: 16px; padding: 12px 16px;
+  background: var(--panel); border: 1px solid var(--grid); border-left: 3px solid var(--muted); border-radius: var(--r-md);
+}
+.finding.critical { border-left-color: var(--warn); }
+.finding.warn { border-left-color: var(--cpu); }
+.finding.info { border-left-color: var(--net); }
+.finding-body { flex: 1; min-width: 0; }
+.finding h3 { margin: 2px 0 2px; font-size: 15px; font-weight: 600; }
+.finding p { margin: 0; color: var(--muted); }
+.finding .btn { flex: none; }
+.finding-tag { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+.finding-tag.critical { color: var(--warn); }
+.finding-tag.warn { color: var(--cpu); }
+.finding-tag.info { color: var(--net); }
+.all-good { display: flex; gap: 14px; align-items: center; padding: 16px; }
+.all-good-ico { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: rgb(107 207 142 / .15); color: var(--ok); font-size: 20px; }
+.all-good p { margin: 2px 0 0; color: var(--muted); }
+.hint-line { color: var(--faint); font-size: 13px; margin: 0 0 16px; }
+
+/* ── Центр отчётов ─────────────────────────────────────── */
+.tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-bottom: 20px; }
+.tpl-card {
+  text-align: left; display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; cursor: pointer;
+  background: var(--panel); color: var(--paper); border: 1px solid var(--grid); border-radius: var(--r-md); font: inherit;
+}
+.tpl-card:hover { background: var(--panel-2); }
+.tpl-card.on { border-color: var(--net); background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--net); }
+.tpl-card b { font-size: 15px; font-weight: 600; }
+.tpl-card span { color: var(--muted); font-size: 13px; }
+.tpl-ico { color: var(--net); display: inline-flex; }
+.tpl-ico svg { width: 20px; height: 20px; }
+.report-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.grow { flex: 1; }
+.doc-frame { padding: 0; overflow: hidden; background: #fff; }
+.doc-frame iframe { display: block; width: 100%; height: 75vh; border: 0; background: #fff; }
+.head-tools .dim { color: var(--muted); }
+
+/* ── Настройки ─────────────────────────────────────────── */
+.settings-panel { padding: 16px 18px; display: flex; flex-direction: column; gap: 14px; }
+.settings-row { display: flex; gap: 24px; align-items: flex-start; justify-content: space-between; }
+.settings-row b { font-size: 15px; font-weight: 600; }
+.settings-row p { margin: 4px 0 0; color: var(--muted); max-width: 72ch; }
+.settings-row > :last-child { flex: none; }
+.settings-facts { display: flex; flex-wrap: wrap; gap: 6px 20px; color: var(--paper); font-size: 13px; }
+.num-grid, .ai-grid { border: 0; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; align-items: end; }
+.ai-grid { grid-template-columns: minmax(220px, 2fr) minmax(180px, 1.4fr) auto; }
+fieldset:disabled { opacity: .5; }
+.num-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.num-field .search, .num-field .select { width: 100%; }
+.num-input { display: flex; align-items: center; gap: 6px; }
+.num-input input {
+  width: 80px; padding: 6px 8px; background: var(--ink); color: var(--paper);
+  border: 1px solid var(--grid); border-radius: var(--r-sm); font: inherit;
+}
+.num-input i { font-style: normal; color: var(--muted); }
+.ai-card p { margin: 0; }
+.ai-text { white-space: pre-wrap; line-height: 1.55; max-width: 90ch; }
+pre.log { margin: 6px 0 0; white-space: pre-wrap; font-size: 12px; color: var(--muted); }
+.ai-card { padding: 14px 16px; }
+.table.updates th, .table.updates td { text-align: left; }
+.table.updates td:last-child { text-align: right; }
