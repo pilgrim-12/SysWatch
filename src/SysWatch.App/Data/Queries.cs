@@ -25,6 +25,7 @@ public sealed class Queries(DayFiles files, Signatures signatures, Func<HashSet<
         long from = FromRange(range), first = long.MaxValue;
         var apps = new Dictionary<string, Acc>(StringComparer.OrdinalIgnoreCase);
         var agent = new SortedDictionary<long, (double Sum, int N)>();
+        double pk = 0, pd = 0, ps = 0, pw = 0, po = 0; int pn = 0;
 
         foreach (var (_, path) in files.For(from))
         {
@@ -56,6 +57,17 @@ public sealed class Queries(DayFiles files, Signatures signatures, Func<HashSet<
                 long m = r.GetInt64(0) / 60 * 60;
                 agent[m] = agent.TryGetValue(m, out var v) ? (v.Sum + r.Dbl0(1), v.N + 1) : (r.Dbl0(1), 1);
             }
+
+            if (c.HasColumn("self_1m", "kernel_pct"))
+            {
+                foreach (var r in c.Cmd("""
+                    SELECT kernel_pct, dns_pct, sampler_pct, writer_pct, other_pct FROM self_1m
+                    WHERE ts >= $from AND kernel_pct IS NOT NULL
+                    """, ("$from", from)).Rows())
+                {
+                    pk += r.Dbl0(0); pd += r.Dbl0(1); ps += r.Dbl0(2); pw += r.Dbl0(3); po += r.Dbl0(4); pn++;
+                }
+            }
         }
 
         double seconds = first == long.MaxValue ? 60 : Math.Max(60, Now() - Math.Max(from, first));
@@ -67,7 +79,8 @@ public sealed class Queries(DayFiles files, Signatures signatures, Func<HashSet<
             .Take(200)
             .ToList();
 
-        return new Overview(list, agent.Values.Select(v => (double?)(v.Sum / v.N)).ToList(), agent.Keys.ToList());
+        var parts = pn > 0 ? new AgentParts(pk / pn, pd / pn, ps / pn, pw / pn, po / pn) : null;
+        return new Overview(list, agent.Values.Select(v => (double?)(v.Sum / v.N)).ToList(), agent.Keys.ToList(), parts);
     }
 
     // ── Таймлайн ─────────────────────────────────────────────────────────
@@ -177,6 +190,22 @@ public sealed class Queries(DayFiles files, Signatures signatures, Func<HashSet<
     }
 
     // ── Сеть ─────────────────────────────────────────────────────────────
+
+    /// <summary>IP → домен по DNS-ответам за сегодня и вчера: подписывать живые соединения.</summary>
+    public Dictionary<string, string> RecentIpDomains()
+    {
+        var map = new Dictionary<string, string>();
+        foreach (var (_, path) in files.For(Now() - 86400))
+        {
+            try
+            {
+                using var c = DayFiles.Open(path);
+                foreach (var (ip, d) in IpToDomain(c)) map[ip] = d;
+            }
+            catch (SqliteException) { }
+        }
+        return map;
+    }
 
     private static Dictionary<string, string> IpToDomain(SqliteConnection c)
     {

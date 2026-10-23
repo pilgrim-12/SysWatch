@@ -60,7 +60,7 @@ export function Plot({ ts, series, height, yFormat, yMax, axes = true, glow = fa
       },
       axes: axes
         ? [
-            { ...axisStyle, grid: { show: false }, values: (_u, vals) => vals.map(v => new Date(v * 1000).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })) },
+            { ...axisStyle, grid: { show: false }, values: (u, vals) => { const span = (u.scales.x.max ?? 0) - (u.scales.x.min ?? 0); return vals.map(v => new Date(v * 1000).toLocaleTimeString('ru-RU', span < 600 ? { hour: '2-digit', minute: '2-digit', second: '2-digit' } : { hour: '2-digit', minute: '2-digit' })); } },
             { ...axisStyle, size: 64, values: (_u, vals) => vals.map(v => (yFormat ? yFormat(v) : String(v))) },
           ]
         : [{ show: false }, { show: false }],

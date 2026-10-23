@@ -53,6 +53,7 @@ public sealed class Detector(DayFiles files, Signatures signatures, AnomalyStore
         }
 
         AutostartChanges(now, found);
+        ExposedPorts(now, found);
         store.Set("last_ts", now.ToString());
         return found;
     }
@@ -254,6 +255,56 @@ public sealed class Detector(DayFiles files, Signatures signatures, AnomalyStore
     }
 
     private static string Gb(long b) => b >= 1L << 30 ? $"{b / (double)(1L << 30):F1} ГБ" : $"{b / (1 << 20)} МБ";
+
+    // ── Программа впервые открыла TCP-порт для подключений из сети ──
+
+    private void ExposedPorts(long now, List<Anomaly> found)
+    {
+        List<(int Pid, string Proto, int Port)> listeners;
+        try { listeners = SysWatch.App.Sampling.Connections.ExposedListeners(); }
+        catch (Exception) { return; }
+
+        // UDP-порты программы открывают и закрывают постоянно (DNS, обнаружение устройств) — смотрим только TCP.
+        var byPath = new Dictionary<string, SortedSet<int>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (pid, proto, port) in listeners.Where(l => l.Proto == "TCP"))
+        {
+            var path = ProcessPath(pid);
+            if (path is null || path.StartsWith(OwnDir, StringComparison.OrdinalIgnoreCase)) continue;
+            if (!byPath.TryGetValue(path, out var ports)) byPath[path] = ports = new SortedSet<int>();
+            ports.Add(port);
+        }
+
+        var saved = store.Get("exposed_programs");
+        var known = saved is null ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(JsonSerializer.Deserialize<string[]>(saved) ?? [], StringComparer.OrdinalIgnoreCase);
+        bool baseline = saved is null;
+
+        foreach (var (path, ports) in byPath)
+        {
+            if (!known.Add(path) || baseline) continue;
+            var app = Path.GetFileName(path);
+            bool unsigned = signatures.Check(path).Status == "unsigned";
+            Add(found, now, "exposed_port", unsigned ? "high" : "medium", app,
+                "Программа принимает подключения из сети",
+                $"{path} открыла порт {string.Join(", ", ports.Select(p => $"TCP {p}"))} не только для этого компьютера, а для всей сети." +
+                (unsigned ? " У файла нет цифровой подписи." : ""),
+                $"exposed_port|{path}");
+        }
+        store.Set("exposed_programs", JsonSerializer.Serialize(known));
+    }
+
+    private static string? ProcessPath(int pid)
+    {
+        var h = SysWatch.Agent.Interop.Native.OpenProcess(SysWatch.Agent.Interop.Native.PROCESS_QUERY_LIMITED_INFORMATION, false, (uint)pid);
+        if (h == IntPtr.Zero) return null;
+        try
+        {
+            var buf = new char[1024];
+            uint size = (uint)buf.Length;
+            return SysWatch.Agent.Interop.Native.QueryFullProcessImageName(h, 0, buf, ref size) && size > 0 ? new string(buf, 0, (int)size) : null;
+        }
+        finally { SysWatch.Agent.Interop.Native.CloseHandle(h); }
+    }
 
     // ── Автозагрузка: новые записи с прошлой проверки ──
 

@@ -14,7 +14,10 @@ public sealed record Live(
 public sealed record AppTotals(
     string Name, double CpuPct, long MemMax, long IoRead, long IoWrite, long NetTx, long NetRx, int Domains);
 
-public sealed record Overview(IReadOnlyList<AppTotals> Apps, IReadOnlyList<double?> AgentCpu, IReadOnlyList<long> Minutes);
+/// <summary>Из чего складывается расход процессора агентом, % всех ядер в среднем за период.</summary>
+public sealed record AgentParts(double Kernel, double Dns, double Sampler, double Writer, double Other);
+
+public sealed record Overview(IReadOnlyList<AppTotals> Apps, IReadOnlyList<double?> AgentCpu, IReadOnlyList<long> Minutes, AgentParts? AgentParts);
 
 public sealed record TimelineApp(string Name, double[] Cpu, double[] Mem, double[] Net);
 

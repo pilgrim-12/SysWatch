@@ -30,7 +30,9 @@ export function ago(ts: number | null | undefined): string {
   const s = Math.max(0, Math.floor(Date.now() / 1000 - ts));
   if (s < 60) return `${s} с назад`;
   if (s < 3600) return `${Math.floor(s / 60)} мин назад`;
-  return `${Math.floor(s / 3600)} ч назад`;
+  if (s < 86400) return `${Math.floor(s / 3600)} ч назад`;
+  const d = Math.floor(s / 86400);
+  return d === 1 ? 'вчера' : `${d} дн. назад`;
 }
 
 /** Имя программы без .exe — короче в таблицах. */
@@ -59,4 +61,16 @@ export function plural(n: number, one: string, few: string, many: string): strin
   const a = Math.abs(n) % 100, b = a % 10;
   const w = a > 10 && a < 20 ? many : b === 1 ? one : b >= 2 && b <= 4 ? few : many;
   return `${n} ${w}`;
+}
+
+const regionNames = (() => {
+  try { return new Intl.DisplayNames(['ru'], { type: 'region' }); } catch { return null; }
+})();
+
+/** Название страны по ISO-коду; LAN — локальная сеть. */
+export function countryName(code: string | null | undefined): string {
+  if (!code) return '';
+  if (code === 'LAN') return 'локальная сеть';
+  if (code === 'ZZ') return '';
+  try { return regionNames?.of(code) ?? code; } catch { return code; }
 }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { api, type CleanupCategory, type DiskState, type DiskTree, type Growth } from '../api';
+import { api, type CleanupCategory, type DiskState, type DiskTree, type Growth, type OpProgress } from '../api';
 import { COLOR, ago, bytes, dayTime } from '../format';
+import { Treemap } from '../components/Treemap';
 
 const GROUPS: { key: CleanupCategory['group']; title: string; note: string }[] = [
   { key: 'system', title: 'Система', note: 'Безопасно удалять: всё это Windows и программы создадут заново при необходимости.' },
@@ -15,7 +16,54 @@ function signed(n: number | null | undefined) {
   return (n > 0 ? '+' : '−') + bytes(Math.abs(n));
 }
 
+function clock(sec: number) {
+  const s = Math.max(0, Math.round(sec));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
+  return h ? `${h}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}` : `${m}:${String(r).padStart(2, '0')}`;
+}
+
+/** Доля обхода: сколько байт уже посчитано из занятых на диске. */
+export function opFraction(op: OpProgress | null) {
+  if (!op || op.phase !== 'disk' || op.target <= 0) return null;
+  return Math.min(0.99, op.bytes / op.target);
+}
+
+function OpPanel({ op, root, onStop }: { op: OpProgress; root: string; onStop: () => void }) {
+  const elapsed = Date.now() / 1000 - op.started;
+  const frac = opFraction(op);
+  const eta = frac && frac > 0.03 ? (elapsed / frac) * (1 - frac) : null;
+  const drive = root.replace('\\', '');
+  const title =
+    op.phase === 'clean' ? 'Удаляю выбранное'
+    : op.phase === 'cleanup' ? `Шаг ${op.step} из ${op.steps}: ищу, что можно очистить`
+    : op.phase === 'disk' ? (op.steps > 1 ? `Шаг ${op.step} из ${op.steps}: обхожу диск ${drive}` : `Обхожу диск ${drive}`)
+    : 'Начинаю';
+
+  return (
+    <div className="panel op-panel" role="status" aria-live="polite">
+      <div className="op-top">
+        <div>
+          <h3>{title}</h3>
+          <div className="dim">
+            {op.phase === 'disk' && <>{bytes(op.bytes)} из {bytes(op.target)}, {op.files.toLocaleString('ru-RU')} файлов, {op.dirs.toLocaleString('ru-RU')} папок, </>}
+            прошло {clock(elapsed)}{eta != null && <>, осталось около {clock(eta)}</>}
+          </div>
+        </div>
+        <b className="op-pct">{frac != null ? `${Math.floor(frac * 100)}%` : ''}</b>
+        <button className="btn" onClick={onStop}>Остановить</button>
+      </div>
+      <div className={`op-bar ${frac == null ? 'indeterminate' : ''}`}>
+        <i style={frac != null ? { width: `${frac * 100}%` } : undefined} />
+      </div>
+      {op.current && <div className="op-current" title={op.current}>{op.current}</div>}
+      <div className="dim op-note">Идёт с низким приоритетом и не мешает работе. Можно закрыть окно — сканирование продолжится.</div>
+    </div>
+  );
+}
+
 export function Disk() {
+  const [root, setRoot] = useState<string | null>(null);
+  const [view, setView] = useState<'map' | 'list'>('map');
   const [state, setState] = useState<DiskState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [path, setPath] = useState<string | null>(null);
@@ -34,7 +82,7 @@ export function Disk() {
     let timer: number;
     const tick = async () => {
       try {
-        const s = await api.disk();
+        const s = await api.disk(root);
         if (!alive) return;
         setState(s);
         setError(null);
@@ -47,19 +95,22 @@ export function Disk() {
     };
     tick();
     return () => { alive = false; clearTimeout(timer); };
-  }, []);
+  }, [root]);
+
+  const currentRoot = state?.root ?? 'C:\\';
+  const selectDrive = (r: string) => { setRoot(r); setPath(null); setTree(null); setGrowth(null); };
 
   const snapId = state?.snapshot?.id ?? null;
 
   // Дерево и рост перечитываем, когда появился новый снимок или сменилась папка.
   useEffect(() => {
-    if (snapId == null) return;
-    api.diskTree(path).then(setTree).catch(() => {});
-  }, [snapId, path]);
+    if (snapId == null) { setTree(null); return; }
+    api.diskTree(currentRoot, path).then(setTree).catch(() => {});
+  }, [snapId, path, currentRoot]);
   useEffect(() => {
-    if (snapId == null) return;
-    api.diskGrowth().then(setGrowth).catch(() => {});
-  }, [snapId]);
+    if (snapId == null) { setGrowth(null); return; }
+    api.diskGrowth(currentRoot).then(setGrowth).catch(() => {});
+  }, [snapId, currentRoot]);
 
   // Новый результат поиска мусора — отметки по умолчанию.
   useEffect(() => {
@@ -93,7 +144,7 @@ export function Disk() {
   };
 
   const run = async (fn: () => Promise<void>) => {
-    try { await fn(); setState(await api.disk()); } catch (e) { setError(String((e as Error).message ?? e)); }
+    try { await fn(); setState(await api.disk(root)); } catch (e) { setError(String((e as Error).message ?? e)); }
   };
 
   const clean = () => run(async () => {
@@ -101,15 +152,15 @@ export function Disk() {
     await api.diskClean([...checked], [...excluded]);
   });
 
-  const drive = state?.drive;
+  const drive = state?.drives.find(d => d.root === state.root) ?? null;
   const used = drive ? drive.total - drive.free : 0;
   const snap = state?.snapshot;
   const crumbs = useMemo(() => {
-    const root = drive?.root ?? 'C:\\';
-    const p = tree?.path ?? root;
-    const parts = p.slice(root.length).split('\\').filter(Boolean);
-    return [{ label: root.replace('\\', ''), path: root }, ...parts.map((part, i) => ({ label: part, path: root + parts.slice(0, i + 1).join('\\') }))];
-  }, [tree, drive]);
+    const r = currentRoot;
+    const p = tree?.path ?? r;
+    const parts = p.slice(r.length).split('\\').filter(Boolean);
+    return [{ label: r.replace('\\', ''), path: r }, ...parts.map((part, i) => ({ label: part, path: r + parts.slice(0, i + 1).join('\\') }))];
+  }, [tree, currentRoot]);
 
   return (
     <>
@@ -120,17 +171,49 @@ export function Disk() {
         </div>
         <div className="head-tools">
           {busy ? (
-            <>
-              <span className="progress-text" title={state?.progress ?? ''}>{state?.progress ?? 'Работаю…'}</span>
-              <button className="btn" onClick={() => run(api.diskCancel)}>Остановить</button>
-            </>
+            <span className="progress-text">
+              {state?.busyRoot && state.busyRoot !== state.root
+                ? `Сканирую ${state.busyRoot.replace('\\', '')}: ${opFraction(state.op) != null ? Math.floor(opFraction(state.op)! * 100) + '%' : '…'}`
+                : ''}
+            </span>
           ) : (
-            <button className="btn primary" onClick={() => run(api.diskScan)}>Сканировать диск</button>
+            <button className="btn primary" onClick={() => run(() => api.diskScan(currentRoot))}>
+              Сканировать {currentRoot.replace('\\', '')}
+            </button>
           )}
         </div>
       </div>
 
       {(error || state?.error) && <div className="error">{error ?? state?.error}</div>}
+
+      {state && state.drives.length > 0 && (
+        <div className="drives" role="group" aria-label="Диски">
+          {state.drives.map(d => {
+            const usedPct = d.total ? ((d.total - d.free) / d.total) * 100 : 0;
+            return (
+              <button key={d.root} className="drive-card" aria-pressed={d.root === state.root} onClick={() => selectDrive(d.root)}>
+                <div className="drive-top"><b>{d.root.replace('\\', '')}</b><span>{d.label}{d.isSystem ? ', системный' : ''}</span></div>
+                <div className="mini-bar"><i className={usedPct > 90 ? 'full' : ''} style={{ width: `${usedPct}%` }} /></div>
+                {state.busyRoot === d.root && (
+                  <div className={`mini-progress ${opFraction(state.op) == null ? 'indeterminate' : ''}`}>
+                    <i style={opFraction(state.op) != null ? { width: `${opFraction(state.op)! * 100}%` } : undefined} />
+                  </div>
+                )}
+                <div className="drive-sub">
+                  свободно {bytes(d.free)} из {bytes(d.total)}
+                  {state.busyRoot === d.root
+                    ? `, сканирую${opFraction(state.op) != null ? ` ${Math.floor(opFraction(state.op)! * 100)}%` : '…'}`
+                    : d.lastScan ? `, снимок ${ago(d.lastScan)}` : ', снимка нет'}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {busy && state?.op && state.busyRoot === state.root && (
+        <OpPanel op={state.op} root={state.root} onStop={() => run(api.diskCancel)} />
+      )}
 
       {drive && (
         <section className="block">
@@ -158,12 +241,18 @@ export function Disk() {
 
       {!snap ? (
         <div className="panel empty">
-          Снимка диска ещё нет. Нажми «Сканировать диск»: обход занимает 1–3 минуты и идёт с низким приоритетом, работе не мешает.
+          Снимка этого диска ещё нет. Нажми «Сканировать»: обход занимает от минуты до нескольких минут и идёт с низким приоритетом, работе не мешает.
         </div>
       ) : (
-        <div className="grid-2">
+        <>
           <section className="block">
-            <h2>Что занимает место <small>снимок {ago(snap.ts)}, {snap.files.toLocaleString('ru-RU')} файлов</small></h2>
+            <h2>
+              Что занимает место <small>снимок {ago(snap.ts)}, {snap.files.toLocaleString('ru-RU')} файлов</small>
+              <span className="seg" role="group" aria-label="Вид" style={{ marginLeft: 'auto' }}>
+                <button aria-pressed={view === 'map'} onClick={() => setView('map')}>Карта</button>
+                <button aria-pressed={view === 'list'} onClick={() => setView('list')}>Список</button>
+              </span>
+            </h2>
             <div className="panel">
               <nav className="crumbs" aria-label="Путь">
                 {crumbs.map((c, i) => (
@@ -174,7 +263,9 @@ export function Disk() {
                 ))}
                 {tree?.delta ? <span className="delta" style={{ marginLeft: 'auto' }}>{signed(tree.delta)}</span> : null}
               </nav>
-              {!tree ? <div className="empty">Загружаю…</div> : (
+              {!tree ? <div className="empty">Загружаю…</div> : view === 'map' ? (
+                <Treemap items={tree.items} other={tree.other} total={tree.size} onOpen={setPath} />
+              ) : (
                 <div className="tree">
                   {tree.items.map(it => (
                     <div key={it.path} className={`tree-row ${it.isDir ? 'dir' : 'file'}`}
@@ -206,7 +297,7 @@ export function Disk() {
               ) : !growth.items.length ? (
                 <div className="empty">Ни одна папка не выросла больше чем на 300 МБ.</div>
               ) : growth.items.map(g => (
-                <div key={g.path} className="grow-row" onClick={() => setPath(g.path.slice(0, g.path.lastIndexOf('\\')) || null)} title="Показать в дереве">
+                <div key={g.path} className="grow-row" onClick={() => { setPath(g.path.slice(0, g.path.lastIndexOf('\\')) || null); setView('list'); }} title="Показать в дереве">
                   <span className="grow-path">{g.path}{g.isNew && <span className="tag new">новая</span>}</span>
                   <span className="delta up">{signed(g.delta)}</span>
                   <span className="dim">{bytes(g.size)}</span>
@@ -214,9 +305,10 @@ export function Disk() {
               ))}
             </div>
           </section>
-        </div>
+        </>
       )}
 
+      {state && !drive?.isSystem ? null : (
       <section className="block">
         <h2>
           Можно очистить
@@ -309,6 +401,7 @@ export function Disk() {
           </div>
         )}
       </section>
+      )}
     </>
   );
 }

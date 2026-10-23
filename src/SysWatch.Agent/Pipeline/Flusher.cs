@@ -31,6 +31,7 @@ public sealed class Flusher(
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
         _lastCpu = _self.TotalProcessorTime;
+        _lastProc = _lastCpu.Ticks;
         _lastTicks = Stopwatch.GetTimestamp();
 
         var interval = TimeSpan.FromSeconds(Math.Max(5, options.Value.FlushIntervalSeconds));
@@ -60,13 +61,17 @@ public sealed class Flusher(
 
         long kernel = Interlocked.Read(ref stats.KernelEvents);
         long dns = Interlocked.Read(ref stats.DnsEvents);
+        // Разбивка за интервал; запись этого интервала попадёт в следующий.
+        var breakdown = Measure(cpu, elapsedMs);
         var self = new SelfSample(
             CpuPct: selfPct,
             WorkingSet: _self.WorkingSet64,
             GcHeap: GC.GetTotalMemory(false),
             KernelEvents: kernel - _lastKernelEvents,
             DnsEvents: dns - _lastDnsEvents,
-            EventsLost: stats.EventsLost());
+            EventsLost: stats.EventsLost(),
+            KernelPct: breakdown.Kernel, DnsPct: breakdown.Dns, SamplerPct: breakdown.Sampler,
+            WriterPct: breakdown.Writer, OtherPct: breakdown.Other);
         _lastKernelEvents = kernel;
         _lastDnsEvents = dns;
 
@@ -84,7 +89,6 @@ public sealed class Flusher(
         sw.Stop();
 
         registry.Sweep();
-        var breakdown = Measure(cpu, elapsedMs);
         log.LogInformation("{Summary}", Summary(bucket, self, elapsedMs, sw.ElapsedMilliseconds, breakdown));
     }
 

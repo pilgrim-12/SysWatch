@@ -4,12 +4,15 @@ using System.Web;
 using SysWatch.App.Anomalies;
 using SysWatch.App.Data;
 using SysWatch.App.Disk;
+using SysWatch.App.Programs;
 using SysWatch.App.Sampling;
+using SysWatch.App.Sys;
 
 namespace SysWatch.App;
 
 /// <summary>Маршрутизатор /api/* для интерфейса. Возвращает (код, JSON).</summary>
-public sealed class Api(Queries queries, LiveSampler live, AnomalyStore anomalies, DiskService disk)
+public sealed class Api(Queries queries, LiveSampler live, AnomalyStore anomalies, DiskService disk, Connections connections,
+    Installed programs, Firewall firewall, GeoIp geo, Startup startup, Hardware hardware)
 {
     private static readonly JsonSerializerOptions Json = new()
     {
@@ -43,14 +46,54 @@ public sealed class Api(Queries queries, LiveSampler live, AnomalyStore anomalie
                     anomalies.Ignore(q["rule"] ?? "", q["app"] ?? "");
                     return (200, "true");
 
+                case "/api/connections" when method == "GET":
+                    return (200, Serialize(connections.Sample()));
+
+                case "/api/system/startup" when method == "GET":
+                    return (200, Serialize(startup.List()));
+                case "/api/system/startup/toggle" when method == "POST":
+                    return (200, Serialize(startup.Toggle(q["id"] ?? "", q["enabled"] == "1")));
+                case "/api/system/disks" when method == "GET":
+                    return (200, Serialize(Hardware.Disks()));
+                case "/api/system/battery" when method == "GET":
+                    return (200, Serialize(Hardware.Battery()));
+                case "/api/system/wakes" when method == "GET":
+                    return (200, Serialize(Hardware.Wakes()));
+                case "/api/system/cpu" when method == "GET":
+                    return (200, Serialize(hardware.Cpu()));
+
+                case "/api/geo/download" when method == "POST":
+                    return (200, Serialize(await geo.DownloadAsync()));
+
+                case "/api/firewall" when method == "GET":
+                    return (200, Serialize(firewall.List()));
+                case "/api/firewall/status" when method == "GET":
+                    return (200, Serialize(firewall.IsBlocked(q["path"] ?? "")));
+                case "/api/firewall/block" when method == "POST":
+                    return (200, Serialize(firewall.Block(q["path"] ?? "")));
+                case "/api/firewall/unblock" when method == "POST":
+                    return (200, Serialize(firewall.Unblock(q["path"] ?? "")));
+
+                case "/api/programs" when method == "GET":
+                    return (200, Serialize(programs.List(q["refresh"] == "1")));
+                case "/api/programs/uninstall" when method == "POST":
+                    return (200, Serialize(programs.Uninstall(q["id"] ?? "")));
+
+                case "/api/process/kill" when method == "POST":
+                    return (200, Serialize(ProcessActions.Kill(q["name"] ?? "")));
+                case "/api/process/priority" when method == "POST":
+                    return (200, Serialize(ProcessActions.Priority(q["name"] ?? "", q["level"] ?? "normal")));
+                case "/api/process/reveal" when method == "POST":
+                    return (200, Serialize(ProcessActions.Reveal(q["path"] ?? "")));
+
                 case "/api/disk" when method == "GET":
-                    return (200, Serialize(disk.State()));
+                    return (200, Serialize(disk.State(q["root"])));
                 case "/api/disk/tree" when method == "GET":
-                    return disk.Tree(q["path"]) is { } tree ? (200, Serialize(tree)) : (200, "null");
+                    return disk.Tree(q["root"], q["path"]) is { } tree ? (200, Serialize(tree)) : (200, "null");
                 case "/api/disk/growth" when method == "GET":
-                    return (200, Serialize(disk.Growth()));
+                    return (200, Serialize(disk.Growth(q["root"])));
                 case "/api/disk/scan" when method == "POST":
-                    return (200, Serialize(disk.StartScan()));
+                    return (200, Serialize(disk.StartScan(q["root"])));
                 case "/api/disk/cleanup-scan" when method == "POST":
                     return (200, Serialize(disk.StartCleanupScan()));
                 case "/api/disk/cancel" when method == "POST":

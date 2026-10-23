@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, type Live } from './api';
 import { ago, bytes, pct } from './format';
 import { Scopes, emptyHistory, pushLive, type LiveHistory } from './components/Scopes';
-import { BrandMark, IconAlert, IconDisk, IconHeat, IconList, IconNet, IconPulse } from './components/Icons';
+import { BrandMark, IconAlert, IconApps, IconChip, IconDisk, IconHeat, IconLink, IconList, IconNet, IconPulse } from './components/Icons';
 import { Now } from './screens/Now';
 import { Timeline } from './screens/Timeline';
 import { Network } from './screens/Network';
@@ -10,15 +10,21 @@ import { Events } from './screens/Events';
 import { AppDetail } from './screens/AppDetail';
 import { Anomalies } from './screens/Anomalies';
 import { Disk } from './screens/Disk';
+import { Connections } from './screens/Connections';
+import { Programs } from './screens/Programs';
+import { System } from './screens/System';
 
-type Screen = 'now' | 'timeline' | 'network' | 'anomalies' | 'disk' | 'events';
+type Screen = 'now' | 'connections' | 'timeline' | 'network' | 'anomalies' | 'disk' | 'programs' | 'system' | 'events';
 
 const NAV: { key: Screen; label: string; icon: () => JSX.Element }[] = [
   { key: 'now', label: 'Сейчас', icon: IconPulse },
+  { key: 'connections', label: 'Соединения', icon: IconLink },
   { key: 'timeline', label: 'Таймлайн', icon: IconHeat },
   { key: 'network', label: 'Сеть', icon: IconNet },
   { key: 'anomalies', label: 'Аномалии', icon: IconAlert },
   { key: 'disk', label: 'Диск', icon: IconDisk },
+  { key: 'programs', label: 'Программы', icon: IconApps },
+  { key: 'system', label: 'Система', icon: IconChip },
   { key: 'events', label: 'События', icon: IconList },
 ];
 
@@ -116,6 +122,12 @@ export function App() {
             <Timeline range={range} setRange={setRange} onApp={setApp} />
           ) : screen === 'network' ? (
             <Network range={range} setRange={setRange} onApp={setApp} />
+          ) : screen === 'connections' ? (
+            <Connections onApp={setApp} />
+          ) : screen === 'system' ? (
+            <System onApp={setApp} />
+          ) : screen === 'programs' ? (
+            <Programs />
           ) : screen === 'disk' ? (
             <Disk />
           ) : screen === 'anomalies' ? (

@@ -107,10 +107,13 @@ export interface SysEvent {
   detail: string | null;
 }
 
+export interface AgentParts { kernel: number; dns: number; sampler: number; writer: number; other: number }
+
 export interface Overview {
   apps: AppTotals[];
   agentCpu: number[];   // по минутам, для полоски «стоимость мониторинга»
   minutes: number[];
+  agentParts: AgentParts | null;
 }
 
 export type Severity = 'high' | 'medium' | 'low';
@@ -150,10 +153,24 @@ export interface CleanupCategory {
   items: CleanupItem[];
 }
 
+export interface DriveView {
+  root: string; label: string; format: string; kind: 'fixed' | 'removable';
+  total: number; free: number; isSystem: boolean; lastScan: number | null;
+}
+
+export interface OpProgress {
+  phase: 'start' | 'disk' | 'cleanup' | 'clean';
+  bytes: number; target: number; files: number; dirs: number;
+  started: number; current: string | null; step: number; steps: number;
+}
+
 export interface DiskState {
   status: 'idle' | 'scanning' | 'cleaning';
   progress: string | null;
-  drive: { root: string; total: number; free: number };
+  busyRoot: string | null;
+  op: OpProgress | null;
+  drives: DriveView[];
+  root: string;
   snapshot: { id: number; ts: number; scanned: number; files: number; seconds: number; shadow: number | null; hidden: number } | null;
   compareTs: number | null;
   cleanup: { scannedAt: number; categories: CleanupCategory[] } | null;
@@ -161,9 +178,60 @@ export interface DiskState {
   error: string | null;
 }
 
-export interface TreeItem { path: string; name: string; isDir: boolean; size: number; files: number; delta: number | null }
+export interface TreeChild { name: string; isDir: boolean; size: number }
+export interface TreeItem { path: string; name: string; isDir: boolean; size: number; files: number; delta: number | null; children: TreeChild[]; other: number }
 export interface DiskTree { path: string; size: number; delta: number | null; items: TreeItem[]; other: number }
 export interface Growth { since: number | null; items: { path: string; size: number; delta: number; isNew: boolean }[]; driveDelta: number }
+
+// ── Соединения, программы, действия ──
+
+export interface ConnRow {
+  key: string; proto: 'TCP' | 'UDP'; dir: 'out' | 'in' | 'listen'; pid: number; app: string; path: string | null;
+  local: string; localPort: number; remote: string; remotePort: number; domain: string | null;
+  state: string; firstSeen: number; closedAt: number | null;
+  exposed: boolean;          // порт доступен из сети, а не только с этого компьютера
+  country: string | null;    // ISO-код страны, 'LAN' — локальная сеть
+}
+export interface ConnSnapshot {
+  ts: number; rows: ConnRow[]; out: number; in: number; listen: number; exposed: number;
+  geoAvailable: boolean; geoStatus: string | null;
+}
+export interface BlockedApp { path: string; since: number }
+
+export interface ProgramRow {
+  id: string; name: string; publisher: string | null; version: string | null; installed: number | null;
+  size: number; lastUsed: number | null; lastUsedBy: 'prefetch' | 'history' | 'running' | null;
+  location: string | null; kind: 'app' | 'runtime' | 'unknown'; canUninstall: boolean;
+}
+export interface ProgramList { scannedAt: number; prefetchAvailable: boolean; items: ProgramRow[] }
+export interface ActionResult { ok: boolean; message: string }
+
+// ── Система ──
+
+export interface StartupItem {
+  id: string; name: string; where: string; command: string; path: string | null;
+  enabled: boolean; signature: 'signed' | 'unsigned' | 'system' | 'unknown'; signer: string | null; canToggle: boolean;
+}
+export interface DiskHealth {
+  name: string; media: string; bus: string; size: number; health: 'healthy' | 'warning' | 'unhealthy' | 'unknown';
+  wear: number | null; temperature: number | null; temperatureMax: number | null; powerOnHours: number | null;
+  readErrors: number | null; writeErrors: number | null; startStops: number | null;
+}
+export interface BatteryInfo {
+  present: boolean; charge: number | null; onAc: boolean | null; designCapacity: number | null; fullCapacity: number | null;
+  cycles: number | null; dischargeRate: number | null; chargeRate: number | null; wearPct: number | null; minutesLeft: number | null;
+}
+export interface WakeInfo { events: { ts: number; sleepTs: number | null; source: string; sourceType: string | null }[]; armedDevices: string[]; timers: string[] }
+export interface CpuInfo {
+  name: string; cores: number; threads: number; baseMhz: number; currentMhz: number; performancePct: number;
+  limitPct: number; throttled: boolean; thermal: { name: string; celsius: number }[];
+}
+
+async function postJson<T>(path: string): Promise<T> {
+  const r = await fetch(path, { method: 'POST' });
+  if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+  return r.json() as Promise<T>;
+}
 
 async function post(path: string, body?: unknown): Promise<void> {
   const r = await fetch(path, {
@@ -189,10 +257,29 @@ export const api = {
   events: (range: number) => get<SysEvent[]>(`/api/events?range=${range}`),
   anomalies: (range: number) => get<AnomalyList>(`/api/anomalies?range=${range}`),
   anomaliesSeen: () => post('/api/anomalies/seen'),
-  disk: () => get<DiskState>('/api/disk'),
-  diskTree: (path: string | null) => get<DiskTree | null>(`/api/disk/tree${path ? `?path=${encodeURIComponent(path)}` : ''}`),
-  diskGrowth: () => get<Growth>('/api/disk/growth'),
-  diskScan: () => post('/api/disk/scan'),
+  connections: () => get<ConnSnapshot>('/api/connections'),
+  startup: () => get<StartupItem[]>('/api/system/startup'),
+  startupToggle: (id: string, enabled: boolean) => postJson<boolean>(`/api/system/startup/toggle?id=${encodeURIComponent(id)}&enabled=${enabled ? 1 : 0}`),
+  disksHealth: () => get<DiskHealth[]>('/api/system/disks'),
+  battery: () => get<BatteryInfo>('/api/system/battery'),
+  wakes: () => get<WakeInfo>('/api/system/wakes'),
+  cpu: () => get<CpuInfo>('/api/system/cpu'),
+  geoDownload: () => postJson<boolean>('/api/geo/download'),
+  blocked: () => get<BlockedApp[]>('/api/firewall'),
+  isBlocked: (path: string) => get<boolean>(`/api/firewall/status?path=${encodeURIComponent(path)}`),
+  block: (path: string) => postJson<ActionResult>(`/api/firewall/block?path=${encodeURIComponent(path)}`),
+  unblock: (path: string) => postJson<ActionResult>(`/api/firewall/unblock?path=${encodeURIComponent(path)}`),
+  programs: (refresh = false) => get<ProgramList>(`/api/programs${refresh ? '?refresh=1' : ''}`),
+  uninstall: (id: string) => postJson<boolean>(`/api/programs/uninstall?id=${encodeURIComponent(id)}`),
+  kill: (name: string) => postJson<ActionResult>(`/api/process/kill?name=${encodeURIComponent(name)}`),
+  priority: (name: string, level: 'low' | 'normal') =>
+    postJson<ActionResult>(`/api/process/priority?name=${encodeURIComponent(name)}&level=${level}`),
+  reveal: (path: string) => postJson<ActionResult>(`/api/process/reveal?path=${encodeURIComponent(path)}`),
+  disk: (root: string | null) => get<DiskState>(`/api/disk${root ? `?root=${encodeURIComponent(root)}` : ''}`),
+  diskTree: (root: string, path: string | null) =>
+    get<DiskTree | null>(`/api/disk/tree?root=${encodeURIComponent(root)}${path ? `&path=${encodeURIComponent(path)}` : ''}`),
+  diskGrowth: (root: string) => get<Growth>(`/api/disk/growth?root=${encodeURIComponent(root)}`),
+  diskScan: (root: string) => post(`/api/disk/scan?root=${encodeURIComponent(root)}`),
   diskCleanupScan: () => post('/api/disk/cleanup-scan'),
   diskCancel: () => post('/api/disk/cancel'),
   diskClean: (categories: string[], exclude: string[]) => post('/api/disk/clean', { categories, exclude }),

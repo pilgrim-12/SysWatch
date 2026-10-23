@@ -6,6 +6,8 @@ export const IconNet = () => <svg {...base}><circle cx="5" cy="12" r="2" /><circ
 export const IconList = () => <svg {...base}><path d="M8 6h13M8 12h13M8 18h13" /><circle cx="4" cy="6" r="1" /><circle cx="4" cy="12" r="1" /><circle cx="4" cy="18" r="1" /></svg>;
 export const IconAlert = () => <svg {...base}><path d="M12 3 2.5 20h19L12 3Z" /><path d="M12 10v4" /><circle cx="12" cy="17" r="0.6" /></svg>;
 export const IconDisk = () => <svg {...base}><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 14h18" /><circle cx="17" cy="16.5" r="0.8" /><path d="M6 16.5h6" /></svg>;
+export const IconLink = () => <svg {...base}><path d="M4 17 10 11" /><path d="M7 11h3v3" /><path d="M20 7l-6 6" /><path d="M17 13h-3v-3" /><circle cx="4" cy="17" r="1.6" /><circle cx="20" cy="7" r="1.6" /></svg>;
+export const IconChip = () => <svg {...base}><rect x="6" y="6" width="12" height="12" rx="2" /><rect x="9.5" y="9.5" width="5" height="5" rx="1" /><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3" /></svg>;
 export const IconApps = () => <svg {...base}><rect x="3" y="3" width="8" height="8" rx="2" /><rect x="13" y="3" width="8" height="8" rx="2" /><rect x="3" y="13" width="8" height="8" rx="2" /><rect x="13" y="13" width="8" height="8" rx="2" /></svg>;
 
 export const BrandMark = () => (

@@ -533,3 +533,135 @@ button { font: inherit; color: inherit; }
 .confirm > span { color: var(--warn); }
 .note.ok { color: var(--ok); border-color: rgb(107 207 142 / 0.45); }
 .repeat { color: var(--cpu); margin-left: 6px; }
+
+/* ── Карта диска ────────────────────────────────────── */
+
+.tmap { position: relative; height: 480px; margin: 10px; border-radius: var(--r-sm); overflow: hidden; background: var(--ink); }
+.tile {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid var(--ink);
+  background: color-mix(in srgb, var(--tile) 34%, var(--panel));
+  overflow: hidden;
+}
+.tile.dir { cursor: pointer; }
+.tile.dir:hover { background: color-mix(in srgb, var(--tile) 48%, var(--panel)); outline: 2px solid var(--paper); outline-offset: -2px; z-index: 1; }
+.tile.file { background: color-mix(in srgb, var(--tile) 70%, var(--panel)); }
+.tile.other {
+  background: repeating-linear-gradient(135deg, #1b2a40 0 6px, #172438 6px 12px);
+}
+.tile-label {
+  position: absolute; left: 6px; right: 6px; top: 3px;
+  display: flex; gap: 6px; align-items: baseline;
+  font-size: 13px; color: var(--paper); white-space: nowrap; overflow: hidden;
+  pointer-events: none;
+}
+.tile-label b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.tile-grow { font-style: normal; color: #ffb4a8; margin-left: auto; }
+.subtile {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--tile) 34%, var(--panel));
+  background: color-mix(in srgb, var(--tile) 50%, var(--panel));
+  overflow: hidden;
+}
+.subtile.dir { cursor: pointer; }
+.subtile.dir:hover { background: color-mix(in srgb, var(--tile) 66%, var(--panel)); outline: 1px solid var(--paper); outline-offset: -1px; }
+.subtile.file { background: color-mix(in srgb, var(--tile) 45%, #4a5a70); }
+.subtile.rest { background: color-mix(in srgb, var(--tile) 22%, var(--panel)); }
+.subtile-label { position: absolute; left: 4px; top: 1px; right: 4px; font-size: 11px; color: rgb(230 237 245 / 0.85); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.tmap-tip {
+  position: absolute; z-index: 5; pointer-events: none;
+  min-width: 160px; max-width: 260px; padding: 8px 10px;
+  background: var(--panel-2); border: 1px solid var(--grid); border-radius: var(--r-md);
+  font-size: 13px; line-height: 1.5; color: var(--muted);
+}
+.tmap-tip b { display: block; color: var(--paper); word-break: break-all; }
+
+/* ── Диски ──────────────────────────────────────────── */
+
+.drives { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-bottom: 18px; }
+.drive-card {
+  text-align: left; padding: 12px 14px; cursor: pointer;
+  border: 1px solid var(--grid); border-radius: var(--r-md); background: var(--panel);
+}
+.drive-card:hover { background: var(--panel-2); }
+.drive-card[aria-pressed='true'] { border-color: var(--disk); background: var(--panel-2); }
+.drive-card .drive-top { display: flex; align-items: baseline; gap: 8px; }
+.drive-card .drive-top b { font-size: 18px; font-weight: 600; }
+.drive-card .drive-top span { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drive-card .mini-bar { height: 6px; margin: 8px 0 6px; border-radius: 3px; background: var(--ink); overflow: hidden; }
+.drive-card .mini-bar i { display: block; height: 100%; background: var(--disk); }
+.drive-card .mini-bar i.full { background: var(--warn); }
+.drive-card .drive-sub { color: var(--muted); font-size: 12px; }
+
+.cost-parts { padding: 8px 0 6px; }
+.cost-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--ink); }
+.cost-bar i { display: block; height: 100%; }
+.cost-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.cost-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; vertical-align: 0; }
+
+/* ── Действия, соединения ───────────────────────────── */
+
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: -6px 0 18px; }
+.act-ok { color: var(--ok); }
+.act-bad { color: var(--warn); }
+.check { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); cursor: pointer; }
+.check input { accent-color: var(--net); }
+
+.conn-table td { padding-top: 6px; padding-bottom: 6px; }
+.conn-dir { font-size: 16px; text-align: center !important; }
+.conn-dir.out { color: var(--net); }
+.conn-dir.in { color: var(--cpu); }
+.conn-dir.listen { color: var(--faint); }
+.conn-table .dim { color: var(--muted); }
+.conn-table tr.fresh { animation: conn-fresh 2s ease-out; }
+.conn-table tr.closed td { color: var(--faint); text-decoration: line-through; text-decoration-color: rgb(92 113 140 / 0.6); }
+@keyframes conn-fresh { from { background: rgb(79 195 217 / 0.22); } to { background: transparent; } }
+
+/* ── Прогресс сканирования ──────────────────────────── */
+
+.op-panel { padding: 16px 18px; margin-bottom: 18px; border-color: rgb(242 124 107 / 0.45); }
+.op-top { display: flex; align-items: center; gap: 18px; }
+.op-top h3 { margin: 0 0 4px; font-size: 17px; font-weight: 600; }
+.op-top .dim { color: var(--muted); font-size: 13px; }
+.op-pct { margin-left: auto; font-size: 30px; font-weight: 600; color: var(--disk); min-width: 80px; text-align: right; }
+.op-bar, .mini-progress { position: relative; height: 10px; margin-top: 12px; border-radius: 5px; background: var(--ink); overflow: hidden; }
+.mini-progress { height: 3px; margin-top: 6px; }
+.op-bar i, .mini-progress i {
+  display: block; height: 100%;
+  background: linear-gradient(90deg, #c45f50, var(--disk));
+  transition: width 0.4s ease;
+}
+.op-bar.indeterminate i, .mini-progress.indeterminate i {
+  position: absolute; width: 30%;
+  animation: op-slide 1.4s ease-in-out infinite;
+}
+@keyframes op-slide { from { left: -30%; } to { left: 100%; } }
+.op-current { margin-top: 10px; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.op-note { margin-top: 4px; font-size: 12px; color: var(--faint); }
+.geo-note { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; max-width: none; }
+.attrib { margin-top: 10px; font-size: 12px; color: var(--faint); }
+.attrib a { color: var(--muted); }
+
+/* ── Система ────────────────────────────────────────── */
+
+.hint-line { margin: 10px 0 0; font-size: 13px; color: var(--muted); max-width: 100ch; }
+.hw-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+.hw-card { padding: 14px 16px; }
+.hw-title { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+.hw-title b { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hw-card > .dim { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.hw-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 14px; margin: 12px 0 4px; }
+.hw-stats dt { color: var(--muted); font-size: 12px; }
+.hw-stats dd { margin: 0; font-size: 17px; font-weight: 600; }
+.sub-h { margin: 6px 0 6px; font-size: 13px; font-weight: 500; color: var(--muted); }
+.sub-h + * { margin-bottom: 12px; }
+ul.plain { margin: 0; padding-left: 18px; font-size: 13px; }
+ul.plain li { padding: 2px 0; }
+.switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; color: var(--muted); font-size: 13px; }
+.switch input { appearance: none; width: 34px; height: 18px; border-radius: 9px; background: var(--grid); position: relative; cursor: pointer; transition: background .15s; }
+.switch input::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--paper); transition: left .15s; }
+.switch input:checked { background: var(--ok); }
+.switch input:checked::after { left: 18px; }
+.switch input:disabled { opacity: .5; }

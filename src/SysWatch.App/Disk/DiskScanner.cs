@@ -21,8 +21,12 @@ public sealed class DiskScanner
     };
 
     private readonly List<DiskNode> _nodes = new();
-    private long _dirs;
-    private Action<string>? _progress;
+    private long _dirs, _bytes, _files;
+    private long _lastReport;
+    private Action<ScanProgress>? _progress;
+
+    /// <summary>Сколько уже обойдено: для полосы прогресса.</summary>
+    public sealed record ScanProgress(long Bytes, long Files, long Dirs, string Current);
     private CancellationToken _ct;
 
     public sealed record Result(List<DiskNode> Nodes, long Size, long Files, long Dirs, double Seconds);
@@ -32,7 +36,7 @@ public sealed class DiskScanner
     private const int THREAD_MODE_BACKGROUND_BEGIN = 0x00010000;
     private const int THREAD_MODE_BACKGROUND_END = 0x00020000;
 
-    public Result Scan(string root, Action<string> progress, CancellationToken ct)
+    public Result Scan(string root, Action<ScanProgress> progress, CancellationToken ct)
     {
         _progress = progress;
         _ct = ct;
@@ -66,6 +70,8 @@ public sealed class DiskScanner
                     try { len = f.Length; } catch { continue; }
                     size += len;
                     files++;
+                    _bytes += len;
+                    _files++;
                     if (len >= Threshold || depth == 0)
                         _nodes.Add(new DiskNode(f.FullName, dir, false, len, 1));
                 }
@@ -84,21 +90,45 @@ public sealed class DiskScanner
             files += b;
         }
 
-        if (++_dirs % 2000 == 0) _progress?.Invoke(dir);
+        _dirs++;
+        // Отчёт о прогрессе не чаще 4 раз в секунду.
+        long t = Environment.TickCount64;
+        if (t - _lastReport > 250)
+        {
+            _lastReport = t;
+            _progress?.Invoke(new ScanProgress(_bytes, _files, _dirs, dir));
+        }
         if (depth <= 1 || size >= Threshold)
             _nodes.Add(new DiskNode(dir, parent, true, size, files));
         return (size, files);
     }
 
-    /// <summary>Сколько занимают точки восстановления (теневые копии). null — не удалось узнать.</summary>
-    public static long? ShadowStorage()
+    /// <summary>Сколько точки восстановления (теневые копии) занимают на диске root. null — не удалось узнать.</summary>
+    public static long? ShadowStorage(string root)
     {
         try
         {
-            using var searcher = new ManagementObjectSearcher("SELECT UsedSpace FROM Win32_ShadowStorage");
+            // Буква диска → DeviceID тома (\\?\Volume{...}\), по нему ищем хранилище теневых копий.
+            string? deviceId = null;
+            using (var volumes = new ManagementObjectSearcher("SELECT DeviceID, DriveLetter FROM Win32_Volume"))
+                foreach (ManagementObject v in volumes.Get())
+                    using (v)
+                        if (string.Equals(v["DriveLetter"] as string, root.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
+                            deviceId = v["DeviceID"] as string;
+            if (deviceId is null) return null;
+
             long total = 0;
+            using var searcher = new ManagementObjectSearcher("SELECT UsedSpace, Volume FROM Win32_ShadowStorage");
             foreach (ManagementObject o in searcher.Get())
-                using (o) total += Convert.ToInt64(o["UsedSpace"]);
+            {
+                using (o)
+                {
+                    // Volume — ссылка вида Win32_Volume.DeviceID="\\\\?\\Volume{...}\\"
+                    var reference = (o["Volume"] as string ?? "").Replace("\\\\", "\\");
+                    if (reference.Contains(deviceId, StringComparison.OrdinalIgnoreCase))
+                        total += Convert.ToInt64(o["UsedSpace"]);
+                }
+            }
             return total;
         }
         catch (Exception)

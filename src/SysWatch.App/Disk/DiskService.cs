@@ -1,69 +1,127 @@
 namespace SysWatch.App.Disk;
 
-public sealed record DriveState(string Root, long Total, long Free);
+public sealed record DriveInfoView(string Root, string Label, string Format, string Kind, long Total, long Free, bool IsSystem, long? LastScan);
 public sealed record SnapshotView(long Id, long Ts, long Scanned, long Files, double Seconds, long? Shadow, long Hidden);
 public sealed record CleanupView(long ScannedAt, IReadOnlyList<CleanupCategory> Categories);
 
+/// <summary>Прогресс текущей операции. Target — сколько всего занято на диске (к этому стремится Bytes).</summary>
+public sealed record OpProgress(string Phase, long Bytes, long Target, long Files, long Dirs, long Started, string? Current, int Step, int Steps);
+
 public sealed record DiskState(
-    string Status, string? Progress, DriveState Drive,
+    string Status, string? Progress, OpProgress? Op, string? BusyRoot, IReadOnlyList<DriveInfoView> Drives, string Root,
     SnapshotView? Snapshot, long? CompareTs, CleanupView? Cleanup, CleanupResult? LastClean, string? Error);
 
-public sealed record TreeItem(string Path, string Name, bool IsDir, long Size, long Files, long? Delta);
+public sealed record TreeChild(string Name, bool IsDir, long Size);
+public sealed record TreeItem(string Path, string Name, bool IsDir, long Size, long Files, long? Delta, IReadOnlyList<TreeChild> Children, long Other);
 public sealed record Tree(string Path, long Size, long? Delta, IReadOnlyList<TreeItem> Items, long Other);
 
 public sealed record GrowthItem(string Path, long Size, long Delta, bool IsNew);
 public sealed record Growth(long? Since, IReadOnlyList<GrowthItem> Items, long DriveDelta);
 
 /// <summary>
-/// Раздел «Диск»: снимки размеров папок, сравнение снимков и очистка. Тяжёлая работа — по одной за раз,
-/// в отдельном фоновом потоке. Раз в сутки снимок делается сам, если компьютер не занят.
+/// Раздел «Диск»: снимки размеров папок по каждому диску, сравнение снимков и очистка системного диска.
+/// Тяжёлая работа — по одной за раз, в отдельном фоновом потоке. Системный диск раз в сутки сканируется сам.
 /// </summary>
 public sealed class DiskService
 {
     private readonly DiskStore _store = new();
     private readonly object _gate = new();
-    private readonly string _root = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows))!;
+    private readonly string _system = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows))!;
 
     private string _status = "idle";
-    private string? _progress, _error;
+    private string? _progress, _error, _busyRoot;
+    private OpProgress? _op;
     private CleanupView? _cleanup;
     private CleanupResult? _lastClean;
     private CancellationTokenSource? _cts;
 
     private static long Now() => DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
-    public DiskState State()
+    /// <summary>Локальные диски, которые готовы к чтению: встроенные и подключённые по USB.</summary>
+    public List<DriveInfoView> Drives()
     {
-        var drive = new DriveInfo(_root);
-        var latest = _store.Latest();
+        var scans = _store.LastScans();
+        var list = new List<DriveInfoView>();
+        foreach (var d in DriveInfo.GetDrives())
+        {
+            if (d.DriveType is not (DriveType.Fixed or DriveType.Removable)) continue;
+            try
+            {
+                if (!d.IsReady) continue;
+                list.Add(new DriveInfoView(
+                    d.RootDirectory.FullName,
+                    string.IsNullOrWhiteSpace(d.VolumeLabel) ? (d.DriveType == DriveType.Removable ? "Съёмный диск" : "Локальный диск") : d.VolumeLabel,
+                    d.DriveFormat,
+                    d.DriveType == DriveType.Removable ? "removable" : "fixed",
+                    d.TotalSize, d.TotalFreeSpace,
+                    d.RootDirectory.FullName.Equals(_system, StringComparison.OrdinalIgnoreCase),
+                    scans.TryGetValue(d.RootDirectory.FullName, out var ts) ? ts : null));
+            }
+            catch (IOException) { /* диск отключили во время опроса */ }
+        }
+        return list;
+    }
+
+    private string Normalize(string? root)
+    {
+        if (string.IsNullOrWhiteSpace(root)) return _system;
+        var r = Path.GetPathRoot(root);
+        return string.IsNullOrEmpty(r) ? _system : r.ToUpperInvariant();
+    }
+
+    public DiskState State(string? root)
+    {
+        root = Normalize(root);
+        var drives = Drives();
+        var drive = drives.FirstOrDefault(d => d.Root.Equals(root, StringComparison.OrdinalIgnoreCase));
+        var latest = _store.Latest(root);
         long? compare = latest is null ? null : _store.CompareTo(latest)?.Ts;
         SnapshotView? snap = latest is null ? null : new SnapshotView(
             latest.Id, latest.Ts, latest.Scanned, latest.Files, latest.Seconds, latest.Shadow,
-            // То, что занято, но обходом не найдено: служебные файлы NTFS, теневые копии, недоступные папки.
-            Math.Max(0, latest.Total - latest.Free - latest.Scanned));
+            // Занято, но обходом не найдено: служебные файлы NTFS, теневые копии, недоступные папки.
+            Math.Max(0, (drive?.Total ?? latest.Total) - (drive?.Free ?? latest.Free) - latest.Scanned));
 
+        bool isSystem = root.Equals(_system, StringComparison.OrdinalIgnoreCase);
         lock (_gate)
-            return new DiskState(_status, _progress, new DriveState(_root, drive.TotalSize, drive.TotalFreeSpace),
-                snap, compare, _cleanup, _lastClean, _error);
+            return new DiskState(_status, _progress, _op, _busyRoot, drives, root, snap, compare,
+                isSystem ? _cleanup : null, isSystem ? _lastClean : null, _error);
     }
 
-    /// <summary>Полное сканирование: снимок диска, затем поиск того, что можно очистить.</summary>
-    public bool StartScan() => Start("scanning", ct =>
+    /// <summary>Снимок диска; для системного диска — ещё и поиск того, что можно очистить.</summary>
+    public bool StartScan(string? root)
     {
-        var started = Now();
-        var scanner = new DiskScanner();
-        var result = scanner.Scan(_root, p => SetProgress($"Обхожу {p}"), ct);
-        SetProgress("Проверяю точки восстановления");
-        var drive = new DriveInfo(_root);
-        var shadow = DiskScanner.ShadowStorage();
-        _store.Save(new SnapshotInfo(0, started, _root, drive.TotalSize, drive.TotalFreeSpace, result.Size, result.Files, result.Seconds, shadow), result.Nodes);
+        root = Normalize(root);
+        var target = root;
+        return Start("scanning", target, ct =>
+        {
+            var started = Now();
+            var d0 = new DriveInfo(target);
+            long used = d0.TotalSize - d0.TotalFreeSpace;
+            bool system = target.Equals(_system, StringComparison.OrdinalIgnoreCase);
+            int steps = system ? 2 : 1;
+            var result = new DiskScanner().Scan(target, p =>
+            {
+                lock (_gate)
+                {
+                    _progress = $"Обхожу {p.Current}";
+                    _op = new OpProgress("disk", p.Bytes, used, p.Files, p.Dirs, started, p.Current, 1, steps);
+                }
+            }, ct);
+            SetProgress("Проверяю точки восстановления");
+            var drive = new DriveInfo(target);
+            var shadow = DiskScanner.ShadowStorage(target);
+            _store.Save(new SnapshotInfo(0, started, target, drive.TotalSize, drive.TotalFreeSpace, result.Size, result.Files, result.Seconds, shadow), result.Nodes);
 
-        var cats = Cleanup.Scan(p => SetProgress($"Ищу, что можно очистить: {p}"), ct);
-        lock (_gate) _cleanup = new CleanupView(Now(), cats);
-    });
+            if (system)
+            {
+                lock (_gate) _op = new OpProgress("cleanup", result.Size, used, result.Files, result.Dirs, started, null, 2, steps);
+                var cats = Cleanup.Scan(p => SetProgress($"Ищу, что можно очистить: {p}"), ct);
+                lock (_gate) _cleanup = new CleanupView(Now(), cats);
+            }
+        });
+    }
 
-    /// <summary>Только поиск того, что можно очистить (быстрее полного снимка).</summary>
-    public bool StartCleanupScan() => Start("scanning", ct =>
+    public bool StartCleanupScan() => Start("scanning", _system, ct =>
     {
         var cats = Cleanup.Scan(p => SetProgress($"Ищу, что можно очистить: {p}"), ct);
         lock (_gate) _cleanup = new CleanupView(Now(), cats);
@@ -75,12 +133,12 @@ public sealed class DiskService
         lock (_gate) view = _cleanup;
         if (view is null) return false;
 
-        return Start("cleaning", ct =>
+        return Start("cleaning", _system, ct =>
         {
-            var before = new DriveInfo(_root).TotalFreeSpace;
+            var before = new DriveInfo(_system).TotalFreeSpace;
             var r = Cleanup.Clean(view.Categories, categories, exclude, p => SetProgress($"Удаляю: {p}"), ct);
-            var after = new DriveInfo(_root).TotalFreeSpace;
-            // Освобождено по факту диска (точнее суммы размеров, если файлы были жёсткими ссылками).
+            var after = new DriveInfo(_system).TotalFreeSpace;
+            // Освобождено по факту диска — точнее суммы размеров, если файлы были жёсткими ссылками.
             lock (_gate) _lastClean = r with { Freed = Math.Max(r.Freed, after - before) };
 
             var cats = Cleanup.Scan(p => SetProgress($"Пересчитываю: {p}"), ct);
@@ -93,28 +151,30 @@ public sealed class DiskService
         lock (_gate) _cts?.Cancel();
     }
 
-    /// <summary>Вызывается из трея раз в час: снимок раз в сутки, когда процессор почти свободен.</summary>
+    /// <summary>Вызывается из трея раз в час: системный диск раз в сутки, когда процессор почти свободен.</summary>
     public void MaybeAutoScan(double systemCpu)
     {
         if (systemCpu > 25) return;
-        var latest = _store.Latest();
+        var latest = _store.Latest(_system);
         if (latest is not null && Now() - latest.Ts < 23 * 3600) return;
-        StartScan();
+        StartScan(_system);
     }
 
-    private bool Start(string status, Action<CancellationToken> work)
+    private bool Start(string status, string root, Action<CancellationToken> work)
     {
         CancellationTokenSource cts;
         lock (_gate)
         {
             if (_status != "idle") return false;
             _status = status;
+            _busyRoot = root;
             _progress = null;
+            _op = new OpProgress(status == "cleaning" ? "clean" : "start", 0, 0, 0, 0, Now(), null, 1, 1);
             _error = null;
             _cts = cts = new CancellationTokenSource();
         }
 
-        // Отдельный STA-поток: Shell API (Корзина) требует STA, а пул потоков трогать долгой работой не хочется.
+        // Отдельный STA-поток: Shell API (Корзина) требует STA, а пул потоков долгой работой не занимаем.
         var thread = new Thread(() =>
         {
             try { work(cts.Token); }
@@ -122,7 +182,7 @@ public sealed class DiskService
             catch (Exception ex) { lock (_gate) _error = ex.Message; }
             finally
             {
-                lock (_gate) { _status = "idle"; _progress = null; _cts = null; }
+                lock (_gate) { _status = "idle"; _progress = null; _op = null; _busyRoot = null; _cts = null; }
                 cts.Dispose();
             }
         })
@@ -134,25 +194,39 @@ public sealed class DiskService
 
     private void SetProgress(string p)
     {
-        lock (_gate) _progress = p;
+        lock (_gate)
+        {
+            _progress = p;
+            if (_op is not null) _op = _op with { Current = p };
+        }
     }
 
     // ── Дерево и рост ────────────────────────────────────────────────────
 
-    public Tree? Tree(string? path)
+    private static string NameOf(string path) => Path.GetFileName(path.TrimEnd('\\')) is { Length: > 0 } n ? n : path;
+
+    /// <summary>Содержимое папки на два уровня вглубь: для списка и для карты диска.</summary>
+    public Tree? Tree(string? root, string? path)
     {
-        var latest = _store.Latest();
+        root = Normalize(root);
+        var latest = _store.Latest(root);
         if (latest is null) return null;
         var prev = _store.CompareTo(latest);
 
-        path = string.IsNullOrEmpty(path) ? _root : path;
+        path = string.IsNullOrEmpty(path) ? root : path;
         var self = _store.Node(latest.Id, path);
         var children = _store.Children(latest.Id, path);
 
         var prevMap = prev is null ? null : _store.Children(prev.Id, path).ToDictionary(n => n.Path, StringComparer.OrdinalIgnoreCase);
         long? Delta(DiskNode n) => prevMap is null ? null : n.Size - (prevMap.TryGetValue(n.Path, out var p) ? p.Size : 0);
 
-        var items = children.Select(n => new TreeItem(n.Path, Path.GetFileName(n.Path.TrimEnd('\\')), n.IsDir, n.Size, n.Files, Delta(n))).ToList();
+        var items = children.Select(n =>
+        {
+            var grand = n.IsDir ? _store.Children(latest.Id, n.Path) : new List<DiskNode>();
+            var sub = grand.Take(40).Select(g => new TreeChild(NameOf(g.Path), g.IsDir, g.Size)).ToList();
+            return new TreeItem(n.Path, NameOf(n.Path), n.IsDir, n.Size, n.Files, Delta(n), sub, Math.Max(0, n.Size - sub.Sum(x => x.Size)));
+        }).ToList();
+
         long size = self?.Size ?? items.Sum(i => i.Size);
         long? selfDelta = self is null || prev is null ? null : self.Size - (_store.Node(prev.Id, path)?.Size ?? 0);
         return new Tree(path, size, selfDelta, items, Math.Max(0, size - items.Sum(i => i.Size)));
@@ -162,9 +236,10 @@ public sealed class DiskService
     /// Что выросло с прошлого снимка. Показываем самые конкретные папки:
     /// если почти весь рост родителя объясняется одной вложенной папкой, показываем её, а не родителя.
     /// </summary>
-    public Growth Growth()
+    public Growth Growth(string? root)
     {
-        var latest = _store.Latest();
+        root = Normalize(root);
+        var latest = _store.Latest(root);
         if (latest is null) return new Growth(null, [], 0);
         var prev = _store.CompareTo(latest);
         if (prev is null) return new Growth(null, [], 0);
@@ -174,7 +249,7 @@ public sealed class DiskService
         const long Min = 300L << 20; // 300 МБ
 
         var grown = now.Values
-            .Where(n => n.Path.Length > _root.Length)
+            .Where(n => n.Path.Length > root.Length)
             .Select(n => (Node: n, Delta: n.Size - (before.TryGetValue(n.Path, out var b) ? b.Size : 0), IsNew: !before.ContainsKey(n.Path)))
             .Where(x => x.Delta >= Min)
             .ToList();

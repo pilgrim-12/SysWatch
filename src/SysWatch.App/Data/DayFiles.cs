@@ -86,6 +86,13 @@ internal static class SqliteExt
     public static long Long0(this SqliteDataReader r, int i) => r.IsDBNull(i) ? 0 : r.GetInt64(i);
     public static double Dbl0(this SqliteDataReader r, int i) => r.IsDBNull(i) ? 0 : r.GetDouble(i);
 
+    public static bool HasColumn(this SqliteConnection c, string table, string column)
+    {
+        foreach (var r in c.Cmd($"PRAGMA table_info({table})").Rows())
+            if (r.GetString(1).Equals(column, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
+
     /// <summary>Колонка памяти называлась ws_max в первой версии схемы.</summary>
     public static string MemColumn(this SqliteConnection c)
     {

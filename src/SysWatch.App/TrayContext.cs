@@ -4,6 +4,8 @@ using SysWatch.Agent.Interop;
 using SysWatch.App.Anomalies;
 using SysWatch.App.Data;
 using SysWatch.App.Disk;
+using SysWatch.App.Programs;
+using SysWatch.App.Sys;
 using SysWatch.App.Sampling;
 
 namespace SysWatch.App;
@@ -26,6 +28,8 @@ public sealed class TrayContext : ApplicationContext
     private readonly AnomalyStore _anomalies = new();
     private readonly Detector _detector;
     private readonly DiskService _disk = new();
+    private readonly GeoIp _geo = new();
+    private readonly Hardware _hardware = new();
     private readonly System.Windows.Forms.Timer _diskTimer = new() { Interval = 3_600_000 };
     private bool _detecting;
     private double _lastCpu = 100;
@@ -39,7 +43,11 @@ public sealed class TrayContext : ApplicationContext
         var files = new DayFiles();
         var signatures = new Signatures();
         _queries = new Queries(files, signatures, _live.Alive);
-        _api = new Api(_queries, _live, _anomalies, _disk);
+        var connections = new Connections(_queries.RecentIpDomains, _geo);
+        var firewall = new Firewall(_anomalies);
+        var installed = new Installed(files, LiveSampler.RunningPaths);
+        _api = new Api(_queries, _live, _anomalies, _disk, connections, installed, firewall, _geo,
+            new Startup(signatures), _hardware);
         _detector = new Detector(files, signatures, _anomalies);
 
         var menu = new ContextMenuStrip();
@@ -79,6 +87,8 @@ public sealed class TrayContext : ApplicationContext
             _form.FormClosed += (_, _) =>
             {
                 _form = null;
+                _geo.Unload();
+                _hardware.Dispose(); // счётчики частоты процессора нужны только при открытом окне
                 GC.Collect(); // освобождаем память окна сразу, а не когда-нибудь потом
             };
             _form.Show();

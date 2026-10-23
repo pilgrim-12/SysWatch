@@ -69,7 +69,13 @@ public sealed class MainForm : Form
         core.Settings.IsZoomControlEnabled = false;
         core.AddWebResourceRequestedFilter(Host + "*", CoreWebView2WebResourceContext.All);
         core.WebResourceRequested += OnRequest;
-        core.NewWindowRequested += (_, e) => e.Handled = true; // никаких всплывающих окон
+        // Внешние ссылки (https://…) открываем в обычном браузере, окна внутри приложения не создаём.
+        core.NewWindowRequested += (_, e) =>
+        {
+            e.Handled = true;
+            if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var u) && u.Scheme == Uri.UriSchemeHttps && u.Host != "syswatch.local")
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(u.AbsoluteUri) { UseShellExecute = true });
+        };
 
         core.Navigate(Host + "index.html" + _hash);
     }

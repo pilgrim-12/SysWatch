@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { api, type Live } from '../api';
+import { api, type AgentParts, type Live } from '../api';
 import { useLoad, useSort } from '../hooks';
 import { COLOR, appLabel, bytes, pct, plural, rate } from '../format';
 import { Plot } from '../components/Plot';
@@ -13,6 +13,32 @@ function Bar({ value, max, color, children }: { value: number; max: number; colo
       <span style={{ color: 'var(--paper)' }}>{children}</span>
       <i style={{ width: `${w}%` }} />
     </span>
+  );
+}
+
+const PARTS: { key: keyof AgentParts; label: string; color: string }[] = [
+  { key: 'kernel', label: 'события ядра', color: '#4fc3d9' },
+  { key: 'dns', label: 'DNS', color: '#a78bfa' },
+  { key: 'sampler', label: 'опрос процессов', color: '#f2b544' },
+  { key: 'writer', label: 'запись на диск', color: '#f27c6b' },
+  { key: 'other', label: '.NET: JIT, GC, таймеры', color: '#5c718c' },
+];
+
+/** Из чего складывается расход агента: видно, что оптимизировать. */
+function CostParts({ parts }: { parts: AgentParts }) {
+  const total = PARTS.reduce((s, p) => s + parts[p.key], 0);
+  if (total <= 0) return null;
+  return (
+    <div className="cost-parts">
+      <div className="cost-bar">
+        {PARTS.map(p => <i key={p.key} style={{ width: `${(parts[p.key] / total) * 100}%`, background: p.color }} title={`${p.label}: ${pct(parts[p.key], 2)}`} />)}
+      </div>
+      <div className="cost-legend">
+        {PARTS.map(p => (
+          <span key={p.key}><i style={{ background: p.color }} />{p.label} {pct(parts[p.key], 2)}</span>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -129,6 +155,7 @@ export function Now({ live, onApp }: { live: Live | null; onApp: (name: string) 
               {ov && ov.minutes.length > 1
                 ? <Plot ts={ov.minutes} series={agentSeries} height={90} yFormat={v => pct(v, 1)} />
                 : <div className="empty">Нет данных</div>}
+              {ov?.agentParts && <CostParts parts={ov.agentParts} />}
             </div>
           </section>
         </div>

@@ -92,8 +92,9 @@ public sealed class DiskStore
         }
 
         // Старые снимки удаляем, чтобы база не росла сама по себе.
-        Exec(c, "DELETE FROM node WHERE snap IN (SELECT id FROM snapshot ORDER BY ts DESC LIMIT -1 OFFSET $k)", ("$k", Keep));
-        Exec(c, "DELETE FROM snapshot WHERE id IN (SELECT id FROM snapshot ORDER BY ts DESC LIMIT -1 OFFSET $k)", ("$k", Keep));
+        const string Old = "SELECT id FROM snapshot WHERE root = $root COLLATE NOCASE ORDER BY ts DESC LIMIT -1 OFFSET $k";
+        Exec(c, $"DELETE FROM node WHERE snap IN ({Old})", ("$root", info.Root), ("$k", Keep));
+        Exec(c, $"DELETE FROM snapshot WHERE id IN ({Old})", ("$root", info.Root), ("$k", Keep));
         tx.Commit();
         return id;
     }
@@ -104,11 +105,12 @@ public sealed class DiskStore
 
     private const string InfoCols = "id, ts, root, total, free, scanned, files, seconds, shadow";
 
-    public SnapshotInfo? Latest()
+    public SnapshotInfo? Latest(string root)
     {
         using var c = Open();
         using var cmd = c.CreateCommand();
-        cmd.CommandText = $"SELECT {InfoCols} FROM snapshot ORDER BY ts DESC LIMIT 1";
+        cmd.CommandText = $"SELECT {InfoCols} FROM snapshot WHERE root = $root COLLATE NOCASE ORDER BY ts DESC LIMIT 1";
+        cmd.Parameters.AddWithValue("$root", root);
         using var r = cmd.ExecuteReader();
         return r.Read() ? ReadInfo(r) : null;
     }
@@ -119,11 +121,12 @@ public sealed class DiskStore
         using var c = Open();
         using var cmd = c.CreateCommand();
         cmd.CommandText = $"""
-            SELECT {InfoCols} FROM snapshot WHERE id <> $id AND ts < $ts
+            SELECT {InfoCols} FROM snapshot WHERE root = $root COLLATE NOCASE AND id <> $id AND ts < $ts
             ORDER BY CASE WHEN ts <= $week THEN 0 ELSE 1 END, CASE WHEN ts <= $week THEN -ts ELSE ts END
             LIMIT 1
             """;
         cmd.Parameters.AddWithValue("$id", latest.Id);
+        cmd.Parameters.AddWithValue("$root", latest.Root);
         cmd.Parameters.AddWithValue("$ts", latest.Ts);
         cmd.Parameters.AddWithValue("$week", latest.Ts - 6 * 86400);
         using var r = cmd.ExecuteReader();
@@ -138,6 +141,18 @@ public sealed class DiskStore
         cmd.Parameters.AddWithValue("$s", snap);
         cmd.Parameters.AddWithValue("$p", parent);
         return Read(cmd);
+    }
+
+    /// <summary>Время последнего снимка по каждому диску.</summary>
+    public Dictionary<string, long> LastScans()
+    {
+        using var c = Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT root, MAX(ts) FROM snapshot GROUP BY root";
+        var d = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        using var r = cmd.ExecuteReader();
+        while (r.Read()) d[r.GetString(0)] = r.GetInt64(1);
+        return d;
     }
 
     public DiskNode? Node(long snap, string path)

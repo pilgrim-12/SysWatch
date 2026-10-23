@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { api, type AppDetail as Detail } from '../api';
 import { useLoad } from '../hooks';
 import { COLOR, RANGES, appLabel, bytes, dayTime, pct } from '../format';
@@ -35,6 +35,13 @@ export function AppDetail({ name, range, setRange, onBack }: { name: string; ran
   }, [d]);
 
   const live = d?.processes.filter(p => p.exited == null).length ?? 0;
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [confirmKill, setConfirmKill] = useState(false);
+  const fw = useLoad(() => (d?.path ? api.isBlocked(d.path) : Promise.resolve(false)), [d?.path]);
+  const act = async (fn: () => Promise<{ ok: boolean; message: string }>) => {
+    try { const r = await fn(); setMsg({ ok: r.ok, text: r.message }); app.reload(); }
+    catch (e) { setMsg({ ok: false, text: String((e as Error).message ?? e) }); }
+  };
 
   return (
     <>
@@ -45,6 +52,7 @@ export function AppDetail({ name, range, setRange, onBack }: { name: string; ran
         <div style={{ minWidth: 0 }}>
           <h1>{appLabel(name)}</h1>
           <div className="path">{d?.path ?? (app.loading ? 'Загружаю…' : 'Путь к файлу неизвестен')}</div>
+          {fw.data && <div style={{ marginTop: 6 }}><span className="tag bad">выход в сеть запрещён</span></div>}
           {d && <div style={{ marginTop: 8, display: 'flex', gap: 8 }}><Signature d={d} /><span className="tag">{live} запущено, {d.processes.length} за период</span></div>}
         </div>
         <div className="head-tools">
@@ -54,6 +62,25 @@ export function AppDetail({ name, range, setRange, onBack }: { name: string; ran
             ))}
           </div>
         </div>
+      </div>
+
+      <div className="actions">
+        {d?.path && <button className="btn" onClick={() => act(() => api.reveal(d.path!))}>Показать файл</button>}
+        {d?.path && (fw.data
+          ? <button className="btn" onClick={() => act(() => api.unblock(d.path!)).then(fw.reload)}>Разрешить сеть</button>
+          : <button className="btn" onClick={() => act(() => api.block(d.path!)).then(fw.reload)} title="Правило Брандмауэра Windows: программа не сможет ни подключаться, ни принимать подключения">Запретить сеть</button>)}
+        <button className="btn" disabled={!live} onClick={() => act(() => api.priority(name, 'low'))} title="Программа будет уступать процессор всем остальным">Понизить приоритет</button>
+        <button className="btn" disabled={!live} onClick={() => act(() => api.priority(name, 'normal'))}>Обычный приоритет</button>
+        {confirmKill ? (
+          <span className="confirm">
+            <span>Завершить все процессы {name}? Несохранённые данные пропадут.</span>
+            <button className="btn danger" onClick={() => { setConfirmKill(false); act(() => api.kill(name)); }}>Завершить</button>
+            <button className="btn" onClick={() => setConfirmKill(false)}>Отмена</button>
+          </span>
+        ) : (
+          <button className="btn" disabled={!live} onClick={() => setConfirmKill(true)}>Завершить…</button>
+        )}
+        {msg && <span className={msg.ok ? 'act-ok' : 'act-bad'}>{msg.text}</span>}
       </div>
 
       {app.error && <div className="error">Не удалось загрузить программу: {app.error}</div>}

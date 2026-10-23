@@ -173,6 +173,27 @@ public sealed class LiveSampler : IDisposable
             : null;
     }
 
+    /// <summary>Пути exe всех запущенных сейчас процессов (для «последнего запуска» программ).</summary>
+    public static HashSet<string> RunningPaths()
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var ids = new uint[8192];
+        var buf = new char[1024];
+        if (!Native.EnumProcesses(ids, (uint)(ids.Length * sizeof(uint)), out var bytes)) return set;
+        for (int i = 0; i < bytes / sizeof(uint); i++)
+        {
+            var h = Native.OpenProcess(Native.PROCESS_QUERY_LIMITED_INFORMATION, false, ids[i]);
+            if (h == IntPtr.Zero) continue;
+            try
+            {
+                uint size = (uint)buf.Length;
+                if (Native.QueryFullProcessImageName(h, 0, buf, ref size) && size > 0) set.Add(new string(buf, 0, (int)size));
+            }
+            finally { Native.CloseHandle(h); }
+        }
+        return set;
+    }
+
     /// <summary>Путь к exe запущенной программы по имени (для карточки, если в истории пути нет).</summary>
     public static string? PathOfRunning(string image)
     {

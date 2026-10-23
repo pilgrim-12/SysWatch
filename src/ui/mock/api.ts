@@ -105,7 +105,7 @@ function overview(range: number) {
     netRx: a.net * 60 * range,
     domains: (DOMAINS[a.name] ?? []).length,
   }));
-  return { apps, minutes: tl.minutes, agentCpu: tl.minutes.map(t => 0.35 + 0.3 * noise(t)) };
+  return { apps, minutes: tl.minutes, agentCpu: tl.minutes.map(t => 0.35 + 0.3 * noise(t)), agentParts: { kernel: 0.21, dns: 0.01, sampler: 0.09, writer: 0.03, other: 0.14 } };
 }
 
 function network(range: number) {
@@ -218,11 +218,17 @@ const TREE: Record<string, [string, number, boolean, number | null][]> = {
   ],
 };
 
-function diskState() {
+function diskState(root: string | null) {
   const t = now();
+  const scanning = root === 'D:\\';
   return {
-    status: 'idle', progress: null, error: null,
-    drive: { root: ROOT, total: 476 * GB, free: 61.7 * GB },
+    status: scanning ? 'scanning' : 'idle', progress: null, error: null, busyRoot: scanning ? 'D:\\' : null, root: root || ROOT,
+    op: scanning ? { phase: 'disk', bytes: 312 * GB, target: 519 * GB, files: 812_344, dirs: 61_207, started: t - 83, current: 'D:\\Projects\\video-archive\\2024\\raw\\clip_0412.mov', step: 1, steps: 1 } : null,
+    drives: [
+      { root: 'C:\\', label: 'Локальный диск', format: 'NTFS', kind: 'fixed', total: 476 * GB, free: 61.7 * GB, isSystem: true, lastScan: t - 3 * 3600 },
+      { root: 'D:\\', label: 'Data', format: 'NTFS', kind: 'fixed', total: 931 * GB, free: 412 * GB, isSystem: false, lastScan: null },
+      { root: 'E:\\', label: 'Samsung T7', format: 'exFAT', kind: 'removable', total: 1863 * GB, free: 96 * GB, isSystem: false, lastScan: t - 9 * 86400 },
+    ],
     snapshot: { id: 3, ts: t - 3 * 3600, scanned: 384 * GB, files: 1_284_311, seconds: 94, shadow: 11.2 * GB, hidden: 30.3 * GB },
     compareTs: t - 7 * 86400,
     lastClean: null,
@@ -251,7 +257,16 @@ function diskState() {
 function diskTree(path: string | null) {
   const p = path || ROOT;
   const rows = TREE[p] ?? [];
-  const items = rows.map(([name, size, isDir, delta]) => ({ path: (p.endsWith('\\') ? p : p + '\\') + name, name, isDir, size, files: 1000, delta }));
+  const sub = (n: string, size: number) => {
+    const kids = TREE[(p.endsWith('\\') ? p : p + '\\') + n];
+    if (kids) return kids.slice(0, 8).map(([cn, cs, cd]) => ({ name: cn, isDir: cd, size: cs }));
+    const parts = [0.34, 0.22, 0.14, 0.09, 0.06];
+    return parts.map((f, i) => ({ name: ['packages', 'cache', 'Microsoft', 'data', 'logs'][i], isDir: true, size: size * f }));
+  };
+  const items = rows.map(([name, size, isDir, delta]) => {
+    const children = isDir ? sub(name, size) : [];
+    return { path: (p.endsWith('\\') ? p : p + '\\') + name, name, isDir, size, files: 1000, delta, children, other: Math.max(0, size - children.reduce((s, c) => s + c.size, 0)) };
+  });
   const total = p === ROOT ? 384 * GB : items.reduce((s, i) => s + i.size, 0) * 1.12;
   return { path: p, size: total, delta: p === ROOT ? 13.5 * GB : null, items, other: total - items.reduce((s, i) => s + i.size, 0) };
 }
@@ -271,6 +286,56 @@ function diskGrowth() {
   };
 }
 
+const CONNS = [
+  ['out', 'chrome.exe', 'TCP', '142.250.185.78', 443, 'www.youtube.com', 'установлено'],
+  ['out', 'chrome.exe', 'TCP', '140.82.112.25', 443, 'github.com', 'установлено'],
+  ['out', 'claude.exe', 'TCP', '160.79.104.10', 443, 'api.anthropic.com', 'установлено'],
+  ['out', 'Telegram.exe', 'TCP', '149.154.167.51', 443, null, 'установлено'],
+  ['out', 'msedge.exe', 'TCP', '13.107.21.200', 443, 'edge.microsoft.com', 'установлено'],
+  ['out', 'svchost.exe', 'TCP', '20.42.73.29', 443, 'v10.events.data.microsoft.com', 'подключается'],
+  ['out', 'Code.exe', 'TCP', '13.107.6.175', 443, 'marketplace.visualstudio.com', 'установлено'],
+  ['out', 'Viber.exe', 'TCP', '52.0.252.0', 4244, 'content.cdn.viber.com', 'установлено'],
+  ['in', 'sqlservr.exe', 'TCP', '192.168.1.24', 52114, null, 'установлено'],
+  ['listen', 'sqlservr.exe', 'TCP', '0.0.0.0', 0, null, 'слушает'],
+  ['listen', 'mongod.exe', 'TCP', '127.0.0.1', 0, null, 'слушает'],
+  ['listen', 'svchost.exe', 'UDP', '0.0.0.0', 0, null, 'слушает'],
+  ['listen', 'sideloadlydaemon.exe', 'TCP', '127.0.0.1', 0, null, 'слушает'],
+] as const;
+
+function connections() {
+  const t = now();
+  const rows = CONNS.map(([dir, app, proto, remote, rport, domain, state], i) => ({
+    key: `k${i}`, proto, dir, pid: 1000 + i * 37, app, path: `C:\\Program Files\\${app}`,
+    local: dir === 'listen' ? remote : '192.168.1.10', localPort: dir === 'listen' ? [1433, 27017, 5353, 26750][i - 9] ?? 0 : dir === 'in' ? 1433 : 50000 + i,
+    remote: dir === 'listen' ? '0.0.0.0' : remote, remotePort: rport, domain, state,
+    firstSeen: t - (i === 5 ? 1 : 30 + i * 140), closedAt: i === 7 ? t - 2 : null,
+    exposed: dir !== 'out' && remote !== '127.0.0.1', country: dir === 'out' ? ['US', 'US', 'US', 'NL', 'IE', 'US', 'US', 'DE'][i] ?? null : dir === 'in' ? 'LAN' : null,
+  }));
+  return { ts: t, rows, out: 7, in: 1, listen: 4, exposed: 2, geoAvailable: true, geoStatus: null };
+}
+
+function programs() {
+  const t = now(), d = 86400;
+  const P = (name: string, pub: string, size: number, last: number | null, by: string | null, kind = 'app', installedAgo = 400) =>
+    ({ id: name, name, publisher: pub, version: '1.0', installed: t - installedAgo * d, size: size * MB, lastUsed: last == null ? null : t - last * d, lastUsedBy: by, location: `C:\\Program Files\\${name}`, kind, canUninstall: true });
+  return {
+    scannedAt: t - 60, prefetchAvailable: true,
+    items: [
+      P('Sideloadly', 'Sideloadly', 210, 190, 'prefetch'),
+      P('Android Studio', 'Google LLC', 3900, 140, 'prefetch'),
+      P('Fiddler Classic', 'Progress Software', 120, 95, 'prefetch'),
+      P('Muse Hub', 'Muse Group', 340, null, null),
+      P('Icecream PDF Editor', 'Icecream Apps', 180, 230, 'prefetch'),
+      P('Azure Data Studio', 'Microsoft Corporation', 620, 75, 'prefetch'),
+      P('Docker Desktop', 'Docker Inc.', 2100, 2, 'prefetch'),
+      P('Visual Studio Code', 'Microsoft Corporation', 410, 0, 'running'),
+      P('Telegram Desktop', 'Telegram FZ-LLC', 160, 0, 'running'),
+      P('Microsoft Visual C++ 2015-2022 Redistributable', 'Microsoft Corporation', 23, null, null, 'runtime'),
+      P('Microsoft .NET Runtime - 8.0.11', 'Microsoft Corporation', 70, null, null, 'runtime'),
+    ],
+  };
+}
+
 export function mockApi(req: IncomingMessage, res: ServerResponse, next: () => void) {
   if (!req.url?.startsWith('/api/')) return next();
   const u = new URL(req.url, 'http://x');
@@ -285,7 +350,28 @@ export function mockApi(req: IncomingMessage, res: ServerResponse, next: () => v
       case '/api/events': return events(range);
       case '/api/anomalies': return anomalies();
       case '/api/anomalies/seen': return true;
-      case '/api/disk': return diskState();
+      case '/api/disk': return diskState(u.searchParams.get('root'));
+      case '/api/connections': return connections();
+      case '/api/system/startup': return [
+        { id: 'a', name: 'Telegram Desktop', where: 'Для этого пользователя', command: '"C:\\Users\\ANTRARES\\AppData\\Roaming\\Telegram Desktop\\Telegram.exe" -autostart', path: 'C:\\Telegram.exe', enabled: true, signature: 'signed', signer: 'Telegram FZ-LLC', canToggle: true },
+        { id: 'b', name: 'Sideloadly', where: 'Для этого пользователя', command: '"C:\\Users\\ANTRARES\\AppData\\Local\\Sideloadly\\sideloadlydaemon.exe"', path: 'C:\\sideloadlydaemon.exe', enabled: true, signature: 'unsigned', signer: null, canToggle: true },
+        { id: 'c', name: 'SecurityHealth', where: 'Для всех пользователей', command: '%windir%\\system32\\SecurityHealthSystray.exe', path: 'C:\\Windows\\system32\\SecurityHealthSystray.exe', enabled: true, signature: 'system', signer: 'Microsoft Windows', canToggle: true },
+        { id: 'd', name: 'Docker Desktop', where: 'Для этого пользователя', command: 'C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe -Autostart', path: 'C:\\Docker Desktop.exe', enabled: false, signature: 'signed', signer: 'Docker Inc', canToggle: true },
+      ];
+      case '/api/system/disks': return [
+        { name: 'Samsung SSD 980 PRO 500GB', media: 'SSD', bus: 'NVMe', size: 500 * GB, health: 'healthy', wear: 7, temperature: 41, temperatureMax: 68, powerOnHours: 6120, readErrors: 0, writeErrors: 0, startStops: 2100 },
+        { name: 'WDC WD10SPZX-80Z10T2', media: 'HDD', bus: 'SATA', size: 1000 * GB, health: 'warning', wear: null, temperature: 36, temperatureMax: 52, powerOnHours: 18233, readErrors: 14, writeErrors: 0, startStops: 9811 },
+      ];
+      case '/api/system/battery': return { present: true, charge: 76, onAc: false, designCapacity: 76000, fullCapacity: 61200, cycles: 312, dischargeRate: 14200, chargeRate: null, wearPct: 19, minutesLeft: 196 };
+      case '/api/system/wakes': return { events: [
+        { ts: now() - 3600 * 7, sleepTs: now() - 3600 * 9, source: 'Таймер: Windows Update Orchestrator', sourceType: 'таймер пробуждения' },
+        { ts: now() - 3600 * 20, sleepTs: now() - 3600 * 22, source: 'Устройство: HID-совместимая мышь', sourceType: 'устройство' },
+        { ts: now() - 3600 * 31, sleepTs: now() - 3600 * 38, source: 'Кнопка питания', sourceType: 'кнопка питания' },
+      ], armedDevices: ['HID-совместимая мышь', 'Клавиатура HID', 'Intel(R) Wi-Fi 6 AX201 160MHz'], timers: ['Таймер, установленный [SERVICE] \\Device\\HarddiskVolume3\\Windows\\System32\\svchost.exe (SystemEventsBroker)'] };
+      case '/api/system/cpu': return { name: 'Intel(R) Core(TM) i7-1165G7 @ 2.80GHz', cores: 4, threads: 8, baseMhz: 2803, currentMhz: 1500 + 2500 * noise(now()), performancePct: 90, limitPct: noise(now() / 10) > 0.7 ? 64 : 100, throttled: noise(now() / 10) > 0.7, thermal: [{ name: 'THRM', celsius: 64 }] };
+      case '/api/firewall': return [{ path: 'C:\\Users\\ANTRARES\\AppData\\Local\\Sideloadly\\sideloadlydaemon.exe', since: now() - 3600 }];
+      case '/api/firewall/status': return false;
+      case '/api/programs': return programs();
       case '/api/disk/tree': return diskTree(u.searchParams.get('path'));
       case '/api/disk/growth': return diskGrowth();
       case '/api/anomalies/ignore': return true;

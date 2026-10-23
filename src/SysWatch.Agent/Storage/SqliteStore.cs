@@ -7,7 +7,8 @@ using SysWatch.Agent.Pipeline;
 namespace SysWatch.Agent.Storage;
 
 public sealed record SelfSample(
-    double CpuPct, long WorkingSet, long GcHeap, long KernelEvents, long DnsEvents, long EventsLost);
+    double CpuPct, long WorkingSet, long GcHeap, long KernelEvents, long DnsEvents, long EventsLost,
+    double KernelPct, double DnsPct, double SamplerPct, double WriterPct, double OtherPct);
 
 /// <summary>
 /// Один SQLite-файл на день (hot\2026-10-22.db). Удаление старых данных —
@@ -96,7 +97,8 @@ public sealed class SqliteStore(IOptions<AgentOptions> options, ILogger<SqliteSt
             Exec(_insSys, b.StartUnix, b.SysCpuSum / b.SysSamples, b.SysMemSum / b.SysSamples);
 
         Exec(_insSelf, b.StartUnix, self.CpuPct, self.WorkingSet, self.GcHeap,
-            self.KernelEvents, self.DnsEvents, self.EventsLost);
+            self.KernelEvents, self.DnsEvents, self.EventsLost,
+            self.KernelPct, self.DnsPct, self.SamplerPct, self.WriterPct, self.OtherPct);
 
         tx.Commit();
     }
@@ -139,6 +141,7 @@ public sealed class SqliteStore(IOptions<AgentOptions> options, ILogger<SqliteSt
             init.CommandText = Schema;
             init.ExecuteNonQuery();
         }
+        AddMissingColumns();
 
         _insProc = Cmd("INSERT INTO process(pid,create_time,first_seen,exited,image,path,cmdline,parent_pid) " +
                        "VALUES($p1,$p2,$p3,$p4,$p5,$p6,$p7,$p8) RETURNING id", 8);
@@ -147,11 +150,32 @@ public sealed class SqliteStore(IOptions<AgentOptions> options, ILogger<SqliteSt
         _insConn = Cmd("INSERT OR REPLACE INTO conn_1m VALUES($p1,$p2,$p3,$p4,$p5,$p6,$p7,$p8,$p9)", 9);
         _insDns = Cmd("INSERT INTO dns VALUES($p1,$p2,$p3,$p4)", 4);
         _insSys = Cmd("INSERT OR REPLACE INTO system_1m VALUES($p1,$p2,$p3)", 3);
-        _insSelf = Cmd("INSERT OR REPLACE INTO self_1m VALUES($p1,$p2,$p3,$p4,$p5,$p6,$p7)", 7);
+        _insSelf = Cmd("INSERT OR REPLACE INTO self_1m(ts, cpu_pct, ws_bytes, gc_heap, kernel_events, dns_events, events_lost, " +
+                       "kernel_pct, dns_pct, sampler_pct, writer_pct, other_pct) " +
+                       "VALUES($p1,$p2,$p3,$p4,$p5,$p6,$p7,$p8,$p9,$p10,$p11,$p12)", 12);
 
         _day = today;
         log.LogInformation("Storage: {Path}", path);
         ApplyRetention(dir, today);
+    }
+
+    /// <summary>Файл дня мог быть создан прошлой версией агента — добавляем новые колонки разбивки расхода.</summary>
+    private void AddMissingColumns()
+    {
+        var have = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var cmd = _conn!.CreateCommand())
+        {
+            cmd.CommandText = "PRAGMA table_info(self_1m)";
+            using var r = cmd.ExecuteReader();
+            while (r.Read()) have.Add(r.GetString(1));
+        }
+        foreach (var col in new[] { "kernel_pct", "dns_pct", "sampler_pct", "writer_pct", "other_pct" })
+        {
+            if (have.Contains(col)) continue;
+            using var alter = _conn.CreateCommand();
+            alter.CommandText = $"ALTER TABLE self_1m ADD COLUMN {col} REAL";
+            alter.ExecuteNonQuery();
+        }
     }
 
     private void ApplyRetention(string dir, DateOnly today)
