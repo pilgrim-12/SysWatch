@@ -73,8 +73,10 @@ public sealed class MainForm : Form
         core.NewWindowRequested += (_, e) =>
         {
             e.Handled = true;
-            if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var u) && u.Scheme == Uri.UriSchemeHttps && u.Host != "syswatch.local")
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(u.AbsoluteUri) { UseShellExecute = true });
+            // Ссылку открываем через explorer.exe: так браузер стартует с обычными правами пользователя,
+            // а не с правами администратора, как само окно SysWatch.
+            if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var u) && (u.Scheme == Uri.UriSchemeHttps || u.Scheme == Uri.UriSchemeHttp) && u.Host != "syswatch.local")
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{u.AbsoluteUri}\"") { UseShellExecute = false });
         };
 
         core.Navigate(Host + "index.html" + _hash);

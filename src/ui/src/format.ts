@@ -63,6 +63,9 @@ export function plural(n: number, one: string, few: string, many: string): strin
   return `${n} ${w}`;
 }
 
+/** Только слово в нужной форме, без числа: для подписей под крупной цифрой. */
+export const pluralWord = (n: number, one: string, few: string, many: string) => plural(n, one, few, many).replace(/^\S+\s/, '');
+
 const regionNames = (() => {
   try { return new Intl.DisplayNames(['ru'], { type: 'region' }); } catch { return null; }
 })();

@@ -3,6 +3,8 @@ using System.Runtime.InteropServices;
 using SysWatch.Agent.Interop;
 using SysWatch.App.Anomalies;
 using SysWatch.App.Data;
+using SysWatch.App.Browsing;
+using SysWatch.App.Dev;
 using SysWatch.App.Disk;
 using SysWatch.App.Programs;
 using SysWatch.App.Reports;
@@ -31,6 +33,7 @@ public sealed class TrayContext : ApplicationContext
     private readonly DiskService _disk = new();
     private readonly GeoIp _geo = new();
     private readonly Hardware _hardware = new();
+    private readonly BrowserHistory _history = new();
     private readonly System.Windows.Forms.Timer _diskTimer = new() { Interval = 3_600_000 };
     private readonly Insights _insights;
     private string _balloonTarget = "#anomalies";
@@ -51,7 +54,7 @@ public sealed class TrayContext : ApplicationContext
         var installed = new Installed(files, LiveSampler.RunningPaths);
         _insights = new Insights(files, _anomalies, _disk);
         _api = new Api(_queries, _live, _anomalies, _disk, connections, installed, firewall, _geo,
-            new Startup(signatures), _hardware, _insights);
+            new Startup(signatures), _hardware, _insights, new DevEnv(installed), _history);
         _detector = new Detector(files, signatures, _anomalies);
 
         var menu = new ContextMenuStrip();
@@ -94,6 +97,7 @@ public sealed class TrayContext : ApplicationContext
                 _form = null;
                 _geo.Unload();
                 _hardware.Dispose(); // счётчики частоты процессора нужны только при открытом окне
+                _history.Clear(); // прочитанную историю браузеров не держим в памяти
                 GC.Collect(); // освобождаем память окна сразу, а не когда-нибудь потом
             };
             _form.Show();

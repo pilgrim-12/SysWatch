@@ -3,6 +3,8 @@ using System.Text.Json.Serialization;
 using System.Web;
 using SysWatch.App.Anomalies;
 using SysWatch.App.Data;
+using SysWatch.App.Browsing;
+using SysWatch.App.Dev;
 using SysWatch.App.Disk;
 using SysWatch.App.Programs;
 using SysWatch.App.Reports;
@@ -13,7 +15,7 @@ namespace SysWatch.App;
 
 /// <summary>Маршрутизатор /api/* для интерфейса. Возвращает (код, JSON).</summary>
 public sealed class Api(Queries queries, LiveSampler live, AnomalyStore anomalies, DiskService disk, Connections connections,
-    Installed programs, Firewall firewall, GeoIp geo, Startup startup, Hardware hardware, Insights insights)
+    Installed programs, Firewall firewall, GeoIp geo, Startup startup, Hardware hardware, Insights insights, DevEnv dev, BrowserHistory history)
 {
     private static readonly JsonSerializerOptions Json = new()
     {
@@ -62,6 +64,28 @@ public sealed class Api(Queries queries, LiveSampler live, AnomalyStore anomalie
                     return (200, Serialize(Hardware.Wakes()));
                 case "/api/system/cpu" when method == "GET":
                     return (200, Serialize(hardware.Cpu()));
+
+                case "/api/history" when method == "GET":
+                {
+                    int days = int.TryParse(q["days"], out var hd) ? hd : 7;
+                    // Копирование баз браузеров может занять секунды — не держим поток окна.
+                    var res = await Task.Run(() => history.Query(days, q["q"], q["source"], q["kind"]));
+                    return (200, Serialize(res));
+                }
+
+                case "/api/dev" when method == "GET":
+                    return (200, Serialize(dev.State(q["refresh"] == "1")));
+                case "/api/dev/service" when method == "POST":
+                    return (200, Serialize(dev.ServiceAction(q["name"] ?? "", q["action"] ?? "")));
+                case "/api/dev/open" when method == "POST":
+                {
+                    // Папку открываем, файл (git.exe, диск WSL) — показываем выделенным в его папке.
+                    var dir = q["path"] ?? "";
+                    string? args = Directory.Exists(dir) ? $"\"{dir}\"" : File.Exists(dir) ? $"/select,\"{dir}\"" : null;
+                    if (args is null) return (200, Serialize(new ActionResult(false, "Папка не найдена.")));
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", args) { UseShellExecute = false });
+                    return (200, Serialize(new ActionResult(true, "Открыто.")));
+                }
 
                 case "/api/report/open" when method == "POST":
                     return (200, Serialize(OpenFile(q["path"] ?? "")));

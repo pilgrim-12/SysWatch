@@ -306,7 +306,46 @@ export interface Report {
   diskGrowth: { since: number | null; driveDelta: number; items: { path: string; size: number; delta: number; isNew: boolean }[] } | null;
 }
 
+
+// ── Среда разработки ──
+
+export interface DevItem {
+  name: string;
+  version: string;
+  path: string | null;
+  size: number | null;
+  support: 'eol' | 'soon' | 'ok' | 'lts' | null;
+  until: number | null;
+  note: string | null;
+  uninstallId: string | null;
+}
+export interface DevGroup { id: string; title: string; hint: string | null; items: DevItem[] }
+export interface DevService { name: string; display: string; state: string; startMode: string; pid: number | null; memory: number | null; path: string | null }
+export interface CommandResolution { command: string; path: string | null; version: string | null; shadowed: string[]; note: string | null }
+export interface PathEntry { dir: string; scope: 'system' | 'user'; exists: boolean; duplicate: boolean }
+export interface DevEnvironment {
+  scannedAt: number; seconds: number; groups: DevGroup[]; services: DevService[];
+  commands: CommandResolution[]; path: PathEntry[];
+}
+export interface DevState { busy: boolean; data: DevEnvironment | null }
+
+
+// ── История браузеров ──
+
+export interface BrowserProfile { id: string; browser: string; profile: string; ok: boolean; error: string | null; visits: number; searches: number }
+export interface HistoryItem { ts: number; source: string; kind: 'visit' | 'search'; url: string; title: string | null; domain: string; term: string | null; engine: string | null }
+export interface DomainStat { domain: string; visits: number; last: number; sources: string[] }
+export interface HistoryResult {
+  from: number; profiles: BrowserProfile[]; items: HistoryItem[]; total: number;
+  searches: number; visits: number; domains: DomainStat[];
+}
+
 export const api = {
+  history: (days: number, q: string, source: string, kind: string) =>
+    get<HistoryResult>(`/api/history?days=${days}&q=${encodeURIComponent(q)}&source=${encodeURIComponent(source)}&kind=${kind}`),
+  dev: (refresh = false) => get<DevState>(`/api/dev${refresh ? '?refresh=1' : ''}`),
+  devService: (name: string, action: 'start' | 'stop' | 'auto' | 'manual' | 'disabled') => postJson<ActionResult>(`/api/dev/service?name=${encodeURIComponent(name)}&action=${action}`),
+  devOpen: (path: string) => postJson<ActionResult>(`/api/dev/open?path=${encodeURIComponent(path)}`),
   report: (days: number) => get<Report>(`/api/report?days=${days}`),
   reportExport: (days: number) => postJson<{ ok: boolean; path: string }>(`/api/report/export?days=${days}`),
   why: (from: number, to: number) => get<Why>(`/api/why?from=${from}&to=${to}`),

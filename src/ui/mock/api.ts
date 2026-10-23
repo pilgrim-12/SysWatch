@@ -255,6 +255,147 @@ function reportMock(days: number) {
   };
 }
 
+function devMock() {
+  const t = now();
+  const d = (y: number, m: number, day: number) => Math.floor(new Date(y, m - 1, day).getTime() / 1000);
+  const P = 'C:\\Program Files\\dotnet';
+  const it = (name: string, version: string, path: string | null, size: number | null, support: string | null, until: number | null, note: string | null, uninstallId: string | null = null) =>
+    ({ name, version, path, size, support, until, note, uninstallId });
+  return {
+    busy: false,
+    data: {
+      scannedAt: t - 40, seconds: 6.2,
+      groups: [
+        { id: 'dotnet', title: '.NET', hint: 'Для каждой основной версии обычно хватает последнего SDK: более старые патчи можно удалить.', items: [
+          it('SDK', '10.0.100', P + '\\sdk\\10.0.100', 0.62 * GB, 'ok', d(2028, 11, 14), null, 'x'),
+          it('SDK', '9.0.305', P + '\\sdk\\9.0.305', 0.55 * GB, 'soon', d(2026, 11, 10), null, 'x'),
+          it('SDK', '8.0.414', P + '\\sdk\\8.0.414', 0.51 * GB, 'soon', d(2026, 11, 10), null, 'x'),
+          it('SDK', '6.0.428', P + '\\sdk\\6.0.428', 0.43 * GB, 'eol', d(2024, 11, 12), null, 'x'),
+          it('SDK', '5.0.408', P + '\\sdk\\5.0.408', 0.39 * GB, 'eol', d(2022, 5, 10), null, 'x'),
+          it('SDK', '3.1.426', P + '\\sdk\\3.1.426', 0.33 * GB, 'eol', d(2022, 12, 13), null, 'x'),
+          it('Runtime', '10.0.0', P + '\\shared\\Microsoft.NETCore.App\\10.0.0', 72 * MB, 'ok', d(2028, 11, 14), null),
+          it('Runtime', '8.0.20', P + '\\shared\\Microsoft.NETCore.App\\8.0.20', 68 * MB, 'soon', d(2026, 11, 10), null),
+          it('ASP.NET Core', '8.0.20', P + '\\shared\\Microsoft.AspNetCore.App\\8.0.20', 21 * MB, 'soon', d(2026, 11, 10), null),
+          it('Desktop Runtime', '10.0.0', P + '\\shared\\Microsoft.WindowsDesktop.App\\10.0.0', 94 * MB, 'ok', d(2028, 11, 14), null),
+          it('Packs и workloads', '', P + '\\packs', 2.8 * GB, null, null, 'MAUI, Android, iOS, WebAssembly и другие нагрузки'),
+        ] },
+        { id: 'netfx', title: '.NET Framework', hint: null, items: [it('.NET Framework 4.x', '4.8.1', null, null, 'ok', null, 'Входит в Windows, удалить нельзя')] },
+        { id: 'node', title: 'Node.js', hint: null, items: [
+          it('Node.js', '22.20.0', 'C:\\Users\\ANTRARES\\AppData\\Roaming\\nvm\\v22.20.0', 92 * MB, 'ok', d(2027, 4, 30), 'nvm'),
+          it('Node.js', '20.18.0', 'C:\\Users\\ANTRARES\\AppData\\Roaming\\nvm\\v20.18.0', 88 * MB, 'eol', d(2026, 4, 30), 'nvm'),
+          it('Node.js', '16.20.2', 'C:\\Users\\ANTRARES\\AppData\\Roaming\\nvm\\v16.20.2', 71 * MB, 'eol', d(2023, 9, 11), 'nvm'),
+        ] },
+        { id: 'npm', title: 'Глобальные пакеты npm', hint: null, items: [
+          it('@anthropic-ai/claude-code', '2.4.1', null, null, null, null, null), it('expo-cli', '6.3.10', null, null, null, null, null),
+          it('typescript', '5.9.3', null, null, null, null, null), it('vercel', '48.2.0', null, null, null, null, null),
+        ] },
+        { id: 'python', title: 'Python', hint: null, items: [
+          it('Python', '3.12.10', 'C:\\Users\\ANTRARES\\AppData\\Local\\Programs\\Python\\Python312', 0.41 * GB, 'ok', d(2028, 10, 31), 'установщик, пакетов: 86', 'x'),
+          it('Python', '3.10.11', 'C:\\Users\\ANTRARES\\AppData\\Local\\Programs\\Python\\Python310', 0.18 * GB, 'soon', d(2026, 10, 31), 'установщик, пакетов: 12', 'x'),
+        ] },
+        { id: 'java', title: 'Java (JDK)', hint: 'Без поддержки — версии не-LTS: на них не выходят исправления безопасности.', items: [
+          it('JDK', '17.0.16', 'C:\\Program Files\\Eclipse Adoptium\\jdk-17.0.16.8-hotspot', 0.31 * GB, 'lts', null, 'Eclipse Adoptium', 'x'),
+          it('JDK', '21.0.8', 'C:\\Program Files\\Android\\Android Studio\\jbr', 0.36 * GB, 'lts', null, 'JetBrains s.r.o., встроен в Android Studio'),
+        ] },
+        { id: 'android', title: 'Android SDK', hint: 'Нужен для React Native и Android Studio. Старые платформы и build-tools — частый источник лишних гигабайт.', items: [
+          it('Платформа', 'android-35', null, 0.2 * GB, null, null, null), it('Платформа', 'android-33', null, 0.18 * GB, null, null, null),
+          it('Build-tools', '35.0.0', null, 0.13 * GB, null, null, null), it('Build-tools', '33.0.1', null, 0.12 * GB, null, null, null),
+          it('NDK', '27.1.12297006', null, 2.4 * GB, null, null, null), it('Образы эмулятора', 'android-34', null, 7.9 * GB, null, null, null),
+          it('Эмулятор (AVD)', 'Pixel_7_API_34', null, 6.1 * GB, null, null, null),
+        ] },
+        { id: 'ide', title: 'IDE и редакторы', hint: null, items: [
+          it('Visual Studio Community 2026', '18.0.1', 'C:\\Program Files\\Microsoft Visual Studio\\18\\Community', null, null, null, 'Компоненты меняются в Visual Studio Installer'),
+          it('Visual Studio Code', '1.105.1', null, null, null, null, 'расширений: 47', 'x'),
+          it('Android Studio', '2025.1.3', null, 2.9 * GB, null, null, 'последний запуск 2 сент. 2026', 'x'),
+        ] },
+        { id: 'containers', title: 'WSL и Docker', hint: 'Диски WSL и Docker сами не уменьшаются после удаления данных внутри — их нужно сжимать отдельно.', items: [
+          it('WSL: Ubuntu-24.04', 'WSL 2', null, 14.2 * GB, null, null, 'размер файла-диска'),
+          it('Docker Desktop', '4.47.0', null, 18.4 * GB, null, null, 'размер диска с образами и томами', 'x'),
+        ] },
+        { id: 'tools', title: 'Инструменты командной строки', hint: null, items: [
+          it('git', '2.51.0', 'C:\\Program Files\\Git\\cmd\\git.exe', null, null, null, null, 'x'), it('gh', '2.80.0', 'C:\\Program Files\\GitHub CLI\\gh.exe', null, null, null, null),
+          it('kubectl', '', 'C:\\Program Files\\Docker\\Docker\\resources\\bin\\kubectl.exe', null, null, null, null), it('az', '', 'C:\\Program Files\\Microsoft SDKs\\Azure\\CLI2\\wbin\\az.cmd', null, null, null, null),
+        ] },
+        { id: 'pm', title: 'Менеджеры пакетов', hint: null, items: [
+          it('winget', '', null, null, null, null, 'Обновить всё: winget upgrade --all'),
+          it('Кэш NuGet', '', 'C:\\Users\\ANTRARES\\.nuget\\packages', 6.7 * GB, null, null, 'Очистка: dotnet nuget locals all --clear'),
+          it('Кэш npm', '', null, 2.2 * GB, null, null, 'Очистка: npm cache clean --force'),
+          it('Кэш Gradle', '', null, 4.9 * GB, null, null, 'Очистка: удалить папку при закрытой IDE'),
+        ] },
+      ],
+      services: [
+        { name: 'MSSQLSERVER', display: 'SQL Server (MSSQLSERVER)', state: 'Running', startMode: 'Auto', pid: 4120, memory: 612 * MB, path: null },
+        { name: 'postgresql-x64-17', display: 'postgresql-x64-17 - PostgreSQL Server 17', state: 'Running', startMode: 'Auto', pid: 5188, memory: 74 * MB, path: null },
+        { name: 'com.docker.service', display: 'Docker Desktop Service', state: 'Stopped', startMode: 'Manual', pid: null, memory: null, path: null },
+        { name: 'SQLBrowser', display: 'SQL Server Browser', state: 'Stopped', startMode: 'Disabled', pid: null, memory: null, path: null },
+      ],
+      commands: [
+        { command: 'dotnet', path: 'C:\\Program Files\\dotnet\\dotnet.exe', version: '10.0.0', shadowed: [], note: null },
+        { command: 'node', path: 'C:\\nvm4w\\nodejs\\node.exe', version: '22.20.0', shadowed: [], note: null },
+        { command: 'python', path: 'C:\\Users\\ANTRARES\\AppData\\Local\\Microsoft\\WindowsApps\\python.exe', version: null, shadowed: ['C:\\Users\\ANTRARES\\AppData\\Local\\Programs\\Python\\Python312\\python.exe'], note: 'Это заглушка Microsoft Store, а не Python: она откроет Store. Отключите её в «Параметры → Приложения → Псевдонимы выполнения» или поставьте нужный Python выше в PATH.' },
+        { command: 'java', path: 'C:\\Program Files\\Common Files\\Oracle\\Java\\javapath\\java.exe', version: '8.0.4510', shadowed: ['C:\\Program Files\\Eclipse Adoptium\\jdk-17.0.16.8-hotspot\\bin\\java.exe'], note: 'Найдено копий: 2. Запускается первая, остальные заслонены.' },
+        { command: 'git', path: 'C:\\Program Files\\Git\\cmd\\git.exe', version: '2.51.0', shadowed: [], note: null },
+      ],
+      path: [
+        { dir: 'C:\\Program Files\\Common Files\\Oracle\\Java\\javapath', scope: 'system', exists: true, duplicate: false },
+        { dir: '%SystemRoot%\\system32', scope: 'system', exists: true, duplicate: false },
+        { dir: 'C:\\Program Files\\dotnet\\', scope: 'system', exists: true, duplicate: false },
+        { dir: 'C:\\Program Files\\Git\\cmd', scope: 'system', exists: true, duplicate: false },
+        { dir: 'C:\\Program Files (x86)\\Razer\\ChromaBroadcast\\bin', scope: 'system', exists: false, duplicate: false },
+        { dir: 'C:\\Users\\ANTRARES\\AppData\\Local\\Microsoft\\WindowsApps', scope: 'user', exists: true, duplicate: false },
+        { dir: 'C:\\Users\\ANTRARES\\AppData\\Local\\Programs\\Python\\Python312\\', scope: 'user', exists: true, duplicate: false },
+        { dir: 'C:\\Program Files\\dotnet', scope: 'user', exists: true, duplicate: true },
+      ],
+    },
+  };
+}
+
+function historyMock(days: number, q: string, source: string, kind: string) {
+  const t = now();
+  const S = [
+    ['как отключить заглушку python microsoft store', 'Google'], ['dotnet 10 release notes', 'Google'], ['ETW TcpIpSend payload layout', 'Google'],
+    ['батуми погода выходные', 'Яндекс'], ['react native new architecture fabric', 'Google'], ['legion pro 5 gen 10 цена грузия', 'Google'],
+    ['uplot time axis format', 'GitHub'], ['postgres 17 logical replication', 'Google'], ['lofi coding mix', 'YouTube'], ['ollama qwen3 coder windows', 'Google'],
+  ];
+  const V = [
+    ['github.com', 'pilgrim-12/SysWatch: Windows system monitor'], ['learn.microsoft.com', 'Event Tracing for Windows (ETW) - Win32 apps'],
+    ['stackoverflow.com', 'c# - Read ETW event payload without allocation'], ['claude.ai', 'Claude'], ['youtube.com', 'Lofi coding mix — YouTube'],
+    ['habr.com', 'Как устроен ETW: разбор изнутри'], ['nuget.org', 'NuGet Gallery | Microsoft.Diagnostics.Tracing.TraceEvent 3.1.20'],
+    ['mail.google.com', 'Входящие — Gmail'], ['web.telegram.org', 'Telegram Web'], ['github.com', 'Pull requests · pilgrim-12/glissando'],
+  ];
+  const sources = ['Chrome', 'Edge', 'Firefox'];
+  const items: any[] = [];
+  for (let i = 0; i < 160; i++) {
+    const ts = t - Math.floor(i * (days * 86400 / 170)) - 300;
+    const src = sources[i % 7 === 0 ? 1 : i % 11 === 0 ? 2 : 0];
+    if (i % 4 === 0) {
+      const [term, engine] = S[(i / 4) % S.length];
+      items.push({ ts, source: src, kind: 'search', url: 'https://www.google.com/search?q=' + encodeURIComponent(term), title: term, domain: 'google.com', term, engine });
+    } else {
+      const [domain, title] = V[i % V.length];
+      items.push({ ts, source: src, kind: 'visit', url: `https://${domain}/`, title, domain, term: null, engine: null });
+    }
+  }
+  const f = items.filter(i => (!source || i.source === source) && (!q || `${i.url} ${i.title} ${i.term ?? ''}`.toLowerCase().includes(q.toLowerCase())));
+  const dom = new Map<string, any>();
+  for (const i of f.filter(i => i.kind === 'visit')) {
+    const d = dom.get(i.domain) ?? { domain: i.domain, visits: 0, last: 0, sources: [] as string[] };
+    d.visits++; d.last = Math.max(d.last, i.ts); if (!d.sources.includes(i.source)) d.sources.push(i.source);
+    dom.set(i.domain, d);
+  }
+  return {
+    from: t - days * 86400,
+    profiles: [
+      { id: 'Chrome', browser: 'Chrome', profile: 'Основной', ok: true, error: null, visits: 98, searches: 31 },
+      { id: 'Edge', browser: 'Edge', profile: '', ok: true, error: null, visits: 14, searches: 5 },
+      { id: 'Firefox', browser: 'Firefox', profile: 'default-release', ok: true, error: null, visits: 8, searches: 4 },
+    ],
+    items: f.filter(i => !kind || i.kind === kind), total: f.length,
+    searches: f.filter(i => i.kind === 'search').length, visits: f.filter(i => i.kind === 'visit').length,
+    domains: [...dom.values()].sort((a, b) => b.visits - a.visits),
+  };
+}
+
 function anomalies() {
   const t = now();
   const items = [
@@ -423,6 +564,8 @@ export function mockApi(req: IncomingMessage, res: ServerResponse, next: () => v
       case '/api/anomalies/seen': return true;
       case '/api/disk': return diskState(u.searchParams.get('root'));
       case '/api/connections': return connections();
+      case '/api/dev': return devMock();
+      case '/api/history': return historyMock(Number(u.searchParams.get('days') ?? 7), u.searchParams.get('q') ?? '', u.searchParams.get('source') ?? '', u.searchParams.get('kind') ?? '');
       case '/api/report': return reportMock(Number(u.searchParams.get('days') ?? 7));
       case '/api/report/export': return { ok: true, path: 'C:\\Users\\ANTRARES\\Documents\\SysWatch\\Отчёт SysWatch 2026-10-16 — 2026-10-23 10-40.html' };
       case '/api/why': { const f = Number(u.searchParams.get('from')); return whyMock(f, Number(u.searchParams.get('to')), 'none'); }

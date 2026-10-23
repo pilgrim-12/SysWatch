@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { api, type ReportApp } from '../api';
 import { useLoad } from '../hooks';
-import { COLOR, appLabel, bytes, dayTime, pct, plural } from '../format';
+import { COLOR, appLabel, bytes, dayTime, pct, pluralWord } from '../format';
 import { Plot } from '../components/Plot';
 import { WhyCard } from '../components/WhyCard';
 
@@ -64,7 +64,7 @@ export function Report({ onApp }: { onApp: (name: string) => void }) {
             <div className="fact"><b style={{ color: COLOR.mem }}>{pct(r.avgMem, 0)}</b><span>память в среднем, пик {pct(r.peakMem, 0)}</span></div>
             <div className="fact">
               <b style={{ color: r.episodes.length ? 'var(--warn)' : COLOR.ok }}>{r.episodes.length}</b>
-              <span>{plural(r.episodes.length, 'перегрузка', 'перегрузки', 'перегрузок')}, всего {r.slowMinutes} мин</span>
+              <span>{pluralWord(r.episodes.length, 'перегрузка', 'перегрузки', 'перегрузок')}, всего {r.slowMinutes} мин</span>
             </div>
             <div className="fact"><b style={{ color: COLOR.net }}>{bytes(r.netRx)}</b><span>получено из сети, отправлено {bytes(r.netTx)}</span></div>
           </div>
