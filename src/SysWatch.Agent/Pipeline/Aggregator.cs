@@ -62,6 +62,10 @@ public sealed class MinuteBucket
     public readonly ConcurrentQueue<ProcInfo> Started = new();
     public readonly ConcurrentQueue<ProcInfo> Stopped = new();
 
+    // Видеокарта: по адаптерам и по процессам. Пишет только GpuSampler.
+    public readonly ConcurrentDictionary<string, Collectors.GpuAcc> Gpu = new();
+    public readonly ConcurrentDictionary<(ProcInfo Proc, string Adapter), Collectors.GpuProcAcc> GpuProcs = new();
+
     // Пишет только сэмплер (один поток).
     public double SysCpuSum;
     public double SysMemSum;

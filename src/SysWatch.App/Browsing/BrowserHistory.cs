@@ -4,7 +4,16 @@ using Microsoft.Data.Sqlite;
 
 namespace SysWatch.App.Browsing;
 
-public sealed record BrowserProfile(string Id, string Browser, string Profile, bool Ok, string? Error, int Visits, int Searches);
+public sealed record BrowserProfile(string Id, string Browser, string Profile, bool Ok, string? Error, int Visits, int Searches, string Db);
+
+/// <summary>Что удалить: конкретные адреса в конкретном браузере или все страницы сайта.</summary>
+public sealed record DeleteTarget(string Source, string Url);
+
+/// <param name="ClearProfiles">Очистить историю этих профилей целиком (или начиная с ClearFrom, unix-время).</param>
+public sealed record DeleteRequest(DeleteTarget[]? Items, string? Domain, string[]? Sources, bool CloseBrowsers,
+    string[]? ClearProfiles = null, long? ClearFrom = null);
+
+public sealed record DeleteResult(bool Ok, string Message, int Deleted, IReadOnlyList<string> Running);
 
 /// <summary>Одна запись: посещение страницы или поисковый запрос (страница результатов поиска).</summary>
 public sealed record HistoryItem(long Ts, string Source, string Kind, string Url, string? Title, string Domain, string? Term, string? Engine);
@@ -160,15 +169,15 @@ public sealed class BrowserHistory
                 reader(c, label, fromUnix, items);
             }
             var mine = items.Skip(before).ToList();
-            return new BrowserProfile(label, browser, profile, true, null, mine.Count(i => i.Kind == "visit"), mine.Count(i => i.Kind == "search"));
+            return new BrowserProfile(label, browser, profile, true, null, mine.Count(i => i.Kind == "visit"), mine.Count(i => i.Kind == "search"), db);
         }
         catch (IOException)
         {
-            return new BrowserProfile(label, browser, profile, false, "Браузер не даёт прочитать историю. Закройте его и обновите страницу.", 0, 0);
+            return new BrowserProfile(label, browser, profile, false, "Браузер не даёт прочитать историю. Закройте его и обновите страницу.", 0, 0, db);
         }
         catch (Exception ex)
         {
-            return new BrowserProfile(label, browser, profile, false, ex.Message, 0, 0);
+            return new BrowserProfile(label, browser, profile, false, ex.Message, 0, 0, db);
         }
         finally
         {
@@ -273,5 +282,245 @@ public sealed class BrowserHistory
         }
 
         into.Add(new HistoryItem(ts, label, "visit", url, string.IsNullOrWhiteSpace(title) ? null : title, host, null, null));
+    }
+
+    // ── Выборочное удаление ──────────────────────────────────────────────
+
+    /// <summary>Процессы браузеров: пока браузер работает, он держит историю и перезапишет наши изменения.</summary>
+    private static readonly Dictionary<string, (string Process, string? PathPart)> Processes = new()
+    {
+        ["Chrome"] = ("chrome", @"\Google\Chrome\"), ["Edge"] = ("msedge", null), ["Brave"] = ("brave", null),
+        ["Vivaldi"] = ("vivaldi", null), ["Яндекс"] = ("browser", @"\Yandex\"), ["Chromium"] = ("chrome", @"\Chromium\"),
+        ["Opera"] = ("opera", null), ["Opera GX"] = ("opera", null), ["Firefox"] = ("firefox", null),
+    };
+
+    private static List<System.Diagnostics.Process> Running(string browser)
+    {
+        var list = new List<System.Diagnostics.Process>();
+        if (!Processes.TryGetValue(browser, out var p)) return list;
+        foreach (var proc in System.Diagnostics.Process.GetProcessesByName(p.Process))
+        {
+            if (p.PathPart is not null)
+            {
+                string? path = null;
+                try { path = proc.MainModule?.FileName; } catch (Exception) { }
+                if (path is not null && !path.Contains(p.PathPart, StringComparison.OrdinalIgnoreCase)) { proc.Dispose(); continue; }
+            }
+            list.Add(proc);
+        }
+        return list;
+    }
+
+    /// <summary>Закрыть браузер штатно (как кнопкой «крестик»), фоновые процессы без окон — завершить.</summary>
+    private static bool Close(string browser)
+    {
+        var procs = Running(browser);
+        foreach (var p in procs.Where(p => p.MainWindowHandle != IntPtr.Zero)) { try { p.CloseMainWindow(); } catch (Exception) { } }
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (DateTime.UtcNow < deadline && procs.Any(p => { try { return !p.HasExited && p.MainWindowHandle != IntPtr.Zero; } catch { return false; } }))
+            Thread.Sleep(300);
+        foreach (var p in procs) { try { if (!p.HasExited) p.Kill(); } catch (Exception) { } }
+        Thread.Sleep(800);
+        foreach (var p in procs) p.Dispose();
+        return Running(browser).Count == 0;
+    }
+
+    public DeleteResult Delete(DeleteRequest req)
+    {
+        List<BrowserProfile> profiles;
+        lock (_gate) profiles = _cache?.Profiles ?? Load(1).Item2;
+
+        // Что и где удаляем: по каждому профилю — набор адресов или «все страницы сайта».
+        var byProfile = new Dictionary<string, HashSet<string>>();
+        foreach (var t in req.Items ?? [])
+        {
+            if (!byProfile.TryGetValue(t.Source, out var set)) byProfile[t.Source] = set = new HashSet<string>(StringComparer.Ordinal);
+            set.Add(t.Url);
+        }
+        var domain = req.Domain?.Trim().ToLowerInvariant();
+        if (!string.IsNullOrEmpty(domain))
+            foreach (var p in profiles.Where(p => p.Ok && (req.Sources is null || req.Sources.Length == 0 || req.Sources.Contains(p.Id))))
+                byProfile.TryAdd(p.Id, new HashSet<string>());
+
+        var clear = new HashSet<string>(req.ClearProfiles ?? []);
+        foreach (var id in clear) byProfile.TryAdd(id, new HashSet<string>());
+
+        var targets = profiles.Where(p => byProfile.ContainsKey(p.Id)).ToList();
+        if (targets.Count == 0) return new DeleteResult(false, "Нечего удалять.", 0, []);
+
+        var browsers = targets.Select(t => t.Browser).Distinct().ToList();
+        var running = browsers.Where(b => Running(b).Count > 0).ToList();
+        if (running.Count > 0)
+        {
+            if (!req.CloseBrowsers)
+                return new DeleteResult(false, $"Сначала нужно закрыть: {string.Join(", ", running)}. Браузер держит файл истории и вернёт удалённое обратно.", 0, running);
+            var stuck = running.Where(b => !Close(b)).ToList();
+            if (stuck.Count > 0)
+                return new DeleteResult(false, $"Не удалось закрыть: {string.Join(", ", stuck)}. Закройте вручную (и проверьте значок в трее) и повторите.", 0, stuck);
+        }
+
+        int deleted = 0;
+        var errors = new List<string>();
+        foreach (var p in targets)
+        {
+            try
+            {
+                deleted += clear.Contains(p.Id) ? ClearIn(p, req.ClearFrom) : DeleteIn(p, byProfile[p.Id], domain);
+            }
+            catch (Exception ex)
+            {
+                errors.Add($"{p.Id}: {ex.Message}");
+            }
+        }
+
+        lock (_gate) _cache = null;
+        return errors.Count == 0
+            ? new DeleteResult(true, clear.Count > 0 ? $"История очищена, удалено посещений: {deleted}. Копия до очистки сохранена рядом с файлом истории (.syswatch-backup)." : $"Удалено адресов: {deleted}. Копия истории до удаления сохранена рядом с ней (файл .syswatch-backup).", deleted, [])
+            : new DeleteResult(deleted > 0, $"Удалено адресов: {deleted}. Ошибки: {string.Join("; ", errors)}", deleted, []);
+    }
+
+    private static bool HostMatches(string url, string domain)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var u)) return false;
+        var host = u.Host.ToLowerInvariant();
+        return host == domain || host.EndsWith("." + domain);
+    }
+
+    private static int DeleteIn(BrowserProfile p, HashSet<string> urls, string? domain)
+    {
+        // Резервная копия перед любым изменением: вернуть историю можно, переименовав файл обратно.
+        File.Copy(p.Db, p.Db + ".syswatch-backup", overwrite: true);
+
+        bool firefox = p.Browser == "Firefox";
+        using var c = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = p.Db, Mode = SqliteOpenMode.ReadWrite, Pooling = false }.ToString());
+        c.Open();
+
+        var ids = new List<long>();
+        using (var sel = c.CreateCommand())
+        {
+            sel.CommandText = firefox ? "SELECT id, url FROM moz_places" : "SELECT id, url FROM urls";
+            using var r = sel.ExecuteReader();
+            while (r.Read())
+            {
+                var url = r.GetString(1);
+                if (urls.Contains(url) || (!string.IsNullOrEmpty(domain) && HostMatches(url, domain))) ids.Add(r.GetInt64(0));
+            }
+        }
+        if (ids.Count == 0) return 0;
+
+        var tables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var t = c.CreateCommand())
+        {
+            t.CommandText = "SELECT name FROM sqlite_master WHERE type = 'table'";
+            using var r = t.ExecuteReader();
+            while (r.Read()) tables.Add(r.GetString(0));
+        }
+
+        using var tx = c.BeginTransaction();
+        void Exec(string sql)
+        {
+            using var cmd = c.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = sql;
+            cmd.ExecuteNonQuery();
+        }
+
+        Exec("CREATE TEMP TABLE del_ids(id INTEGER PRIMARY KEY)");
+        using (var ins = c.CreateCommand())
+        {
+            ins.Transaction = tx;
+            ins.CommandText = "INSERT OR IGNORE INTO del_ids VALUES($id)";
+            var prm = ins.Parameters.Add("$id", SqliteType.Integer);
+            foreach (var id in ids) { prm.Value = id; ins.ExecuteNonQuery(); }
+        }
+
+        if (firefox)
+        {
+            Exec("DELETE FROM moz_historyvisits WHERE place_id IN (SELECT id FROM del_ids)");
+            if (tables.Contains("moz_inputhistory")) Exec("DELETE FROM moz_inputhistory WHERE place_id IN (SELECT id FROM del_ids)");
+            // Страницы из закладок оставляем (иначе пропадёт закладка), но обнуляем их посещения.
+            Exec("UPDATE moz_places SET visit_count = 0, last_visit_date = NULL WHERE id IN (SELECT id FROM del_ids)");
+            Exec("DELETE FROM moz_places WHERE id IN (SELECT id FROM del_ids) AND foreign_count = 0");
+        }
+        else
+        {
+            Exec("CREATE TEMP TABLE del_visits(id INTEGER PRIMARY KEY)");
+            Exec("INSERT INTO del_visits SELECT id FROM visits WHERE url IN (SELECT id FROM del_ids)");
+            foreach (var (table, col) in new[] { ("visit_source", "id"), ("content_annotations", "visit_id"), ("context_annotations", "visit_id"), ("clusters_and_visits", "visit_id") })
+                if (tables.Contains(table)) Exec($"DELETE FROM {table} WHERE {col} IN (SELECT id FROM del_visits)");
+            Exec("DELETE FROM visits WHERE id IN (SELECT id FROM del_visits)");
+            if (tables.Contains("keyword_search_terms")) Exec("DELETE FROM keyword_search_terms WHERE url_id IN (SELECT id FROM del_ids)");
+            if (tables.Contains("segments"))
+            {
+                if (tables.Contains("segment_usage")) Exec("DELETE FROM segment_usage WHERE segment_id IN (SELECT id FROM segments WHERE url_id IN (SELECT id FROM del_ids))");
+                Exec("DELETE FROM segments WHERE url_id IN (SELECT id FROM del_ids)");
+            }
+            Exec("DELETE FROM urls WHERE id IN (SELECT id FROM del_ids)");
+        }
+        tx.Commit();
+        using (var vac = c.CreateCommand()) { vac.CommandText = "VACUUM"; vac.ExecuteNonQuery(); }
+        return ids.Count;
+    }
+
+    /// <summary>Очистить историю профиля: все посещения (или начиная с from), затем адреса, на которые больше нет посещений.</summary>
+    private static int ClearIn(BrowserProfile p, long? from)
+    {
+        File.Copy(p.Db, p.Db + ".syswatch-backup", overwrite: true);
+        bool firefox = p.Browser == "Firefox";
+        using var c = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = p.Db, Mode = SqliteOpenMode.ReadWrite, Pooling = false }.ToString());
+        c.Open();
+
+        var tables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var t = c.CreateCommand())
+        {
+            t.CommandText = "SELECT name FROM sqlite_master WHERE type = 'table'";
+            using var r = t.ExecuteReader();
+            while (r.Read()) tables.Add(r.GetString(0));
+        }
+
+        using var tx = c.BeginTransaction();
+        int Exec(string sql, long? arg = null)
+        {
+            using var cmd = c.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = sql;
+            if (arg is not null) cmd.Parameters.AddWithValue("$from", arg.Value);
+            return cmd.ExecuteNonQuery();
+        }
+
+        int n;
+        if (firefox)
+        {
+            n = from is null ? Exec("DELETE FROM moz_historyvisits") : Exec("DELETE FROM moz_historyvisits WHERE visit_date >= $from", from.Value * 1_000_000);
+            if (tables.Contains("moz_inputhistory")) Exec("DELETE FROM moz_inputhistory WHERE place_id NOT IN (SELECT place_id FROM moz_historyvisits)");
+            Exec("UPDATE moz_places SET visit_count = (SELECT COUNT(*) FROM moz_historyvisits v WHERE v.place_id = moz_places.id), " +
+                 "last_visit_date = (SELECT MAX(visit_date) FROM moz_historyvisits v WHERE v.place_id = moz_places.id)");
+            Exec("DELETE FROM moz_places WHERE visit_count = 0 AND foreign_count = 0");
+        }
+        else
+        {
+            Exec("CREATE TEMP TABLE del_visits(id INTEGER PRIMARY KEY)");
+            if (from is null) Exec("INSERT INTO del_visits SELECT id FROM visits");
+            else Exec("INSERT INTO del_visits SELECT id FROM visits WHERE visit_time >= $from", (from.Value + ChromiumEpoch) * 1_000_000);
+            foreach (var (table, col) in new[] { ("visit_source", "id"), ("content_annotations", "visit_id"), ("context_annotations", "visit_id"), ("clusters_and_visits", "visit_id") })
+                if (tables.Contains(table)) Exec($"DELETE FROM {table} WHERE {col} IN (SELECT id FROM del_visits)");
+            n = Exec("DELETE FROM visits WHERE id IN (SELECT id FROM del_visits)");
+
+            // Адреса без единого посещения больше не нужны — вместе с поисковыми запросами и плитками частых сайтов.
+            Exec("CREATE TEMP TABLE del_ids(id INTEGER PRIMARY KEY)");
+            Exec("INSERT INTO del_ids SELECT id FROM urls WHERE id NOT IN (SELECT DISTINCT url FROM visits)");
+            if (tables.Contains("keyword_search_terms")) Exec("DELETE FROM keyword_search_terms WHERE url_id IN (SELECT id FROM del_ids)");
+            if (tables.Contains("segments"))
+            {
+                if (tables.Contains("segment_usage")) Exec("DELETE FROM segment_usage WHERE segment_id IN (SELECT id FROM segments WHERE url_id IN (SELECT id FROM del_ids))");
+                Exec("DELETE FROM segments WHERE url_id IN (SELECT id FROM del_ids)");
+            }
+            Exec("DELETE FROM urls WHERE id IN (SELECT id FROM del_ids)");
+            Exec("UPDATE urls SET visit_count = (SELECT COUNT(*) FROM visits v WHERE v.url = urls.id)");
+        }
+        tx.Commit();
+
+        using (var vac = c.CreateCommand()) { vac.CommandText = "VACUUM"; vac.ExecuteNonQuery(); } // чтобы удалённое не осталось в свободных страницах файла
+        return n;
     }
 }

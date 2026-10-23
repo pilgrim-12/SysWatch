@@ -51,6 +51,17 @@ public sealed class SqliteStore(IOptions<AgentOptions> options, ILogger<SqliteSt
         CREATE TABLE IF NOT EXISTS system_1m(
             ts INTEGER PRIMARY KEY, cpu_pct REAL, mem_load_pct REAL);
 
+        CREATE TABLE IF NOT EXISTS gpu_1m(
+            ts INTEGER NOT NULL, adapter TEXT NOT NULL, name TEXT,
+            util REAL, util_max REAL, util_3d REAL, util_video REAL, util_compute REAL,
+            mem_dedicated INTEGER, mem_shared INTEGER, mem_total INTEGER,
+            temp REAL, temp_max REAL, power REAL, fan INTEGER,
+            PRIMARY KEY(ts, adapter)) WITHOUT ROWID;
+
+        CREATE TABLE IF NOT EXISTS gpu_proc_1m(
+            ts INTEGER NOT NULL, proc_id INTEGER NOT NULL, adapter TEXT NOT NULL, util REAL, mem INTEGER,
+            PRIMARY KEY(ts, proc_id, adapter)) WITHOUT ROWID;
+
         CREATE TABLE IF NOT EXISTS self_1m(
             ts INTEGER PRIMARY KEY, cpu_pct REAL, ws_bytes INTEGER, gc_heap INTEGER,
             kernel_events INTEGER, dns_events INTEGER, events_lost INTEGER);
@@ -62,7 +73,7 @@ public sealed class SqliteStore(IOptions<AgentOptions> options, ILogger<SqliteSt
     private DateOnly _day;
 
     private SqliteCommand _insProc = null!, _updExit = null!, _insProcMin = null!,
-        _insConn = null!, _insDns = null!, _insSys = null!, _insSelf = null!;
+        _insConn = null!, _insDns = null!, _insSys = null!, _insSelf = null!, _insGpu = null!, _insGpuProc = null!;
 
     public void Write(MinuteBucket b, SelfSample self, ConcurrentDictionary<IPAddress, string> ipToDomain)
     {
@@ -92,6 +103,21 @@ public sealed class SqliteStore(IOptions<AgentOptions> options, ILogger<SqliteSt
 
         foreach (var p in b.Stopped)
             if (_ids.TryGetValue(p, out var id)) Exec(_updExit, p.ExitedUnix, id);
+
+        foreach (var (adapter, g) in b.Gpu)
+        {
+            if (g.Samples == 0) continue;
+            Exec(_insGpu, b.StartUnix, adapter, g.Name, g.Util / g.Samples, g.UtilMax, g.Util3D / g.Samples, g.UtilVideo / g.Samples,
+                g.UtilCompute / g.Samples, g.MemDedicated, g.MemShared, g.MemTotal,
+                g.TempN > 0 ? g.TempSum / g.TempN : null, g.TempN > 0 ? g.TempMax : null,
+                g.PowerN > 0 ? g.PowerSum / g.PowerN : null, g.Fan > 0 ? g.Fan : null);
+        }
+        foreach (var ((proc, adapter), g) in b.GpuProcs)
+        {
+            // Загрузка — средняя за все замеры минуты по адаптеру (процесс мог не попадать в каждый замер).
+            int samples = b.Gpu.TryGetValue(adapter, out var ga) ? Math.Max(ga.Samples, g.Samples) : Math.Max(1, g.Samples);
+            Exec(_insGpuProc, b.StartUnix, GetId(proc, storeCmd), adapter, g.UtilSum / samples, g.MemMax);
+        }
 
         if (b.SysSamples > 0)
             Exec(_insSys, b.StartUnix, b.SysCpuSum / b.SysSamples, b.SysMemSum / b.SysSamples);
@@ -150,6 +176,8 @@ public sealed class SqliteStore(IOptions<AgentOptions> options, ILogger<SqliteSt
         _insConn = Cmd("INSERT OR REPLACE INTO conn_1m VALUES($p1,$p2,$p3,$p4,$p5,$p6,$p7,$p8,$p9)", 9);
         _insDns = Cmd("INSERT INTO dns VALUES($p1,$p2,$p3,$p4)", 4);
         _insSys = Cmd("INSERT OR REPLACE INTO system_1m VALUES($p1,$p2,$p3)", 3);
+        _insGpu = Cmd("INSERT OR REPLACE INTO gpu_1m VALUES($p1,$p2,$p3,$p4,$p5,$p6,$p7,$p8,$p9,$p10,$p11,$p12,$p13,$p14,$p15)", 15);
+        _insGpuProc = Cmd("INSERT OR REPLACE INTO gpu_proc_1m VALUES($p1,$p2,$p3,$p4,$p5)", 5);
         _insSelf = Cmd("INSERT OR REPLACE INTO self_1m(ts, cpu_pct, ws_bytes, gc_heap, kernel_events, dns_events, events_lost, " +
                        "kernel_pct, dns_pct, sampler_pct, writer_pct, other_pct) " +
                        "VALUES($p1,$p2,$p3,$p4,$p5,$p6,$p7,$p8,$p9,$p10,$p11,$p12)", 12);

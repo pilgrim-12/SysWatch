@@ -54,7 +54,7 @@ public sealed class TrayContext : ApplicationContext
         var installed = new Installed(files, LiveSampler.RunningPaths);
         _insights = new Insights(files, _anomalies, _disk);
         _api = new Api(_queries, _live, _anomalies, _disk, connections, installed, firewall, _geo,
-            new Startup(signatures), _hardware, _insights, new DevEnv(installed), _history);
+            new Startup(signatures), _hardware, _insights, new DevEnv(installed), _history, new GpuQueries(files));
         _detector = new Detector(files, signatures, _anomalies);
 
         var menu = new ContextMenuStrip();

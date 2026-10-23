@@ -336,6 +336,33 @@ function devMock() {
         { command: 'java', path: 'C:\\Program Files\\Common Files\\Oracle\\Java\\javapath\\java.exe', version: '8.0.4510', shadowed: ['C:\\Program Files\\Eclipse Adoptium\\jdk-17.0.16.8-hotspot\\bin\\java.exe'], note: 'Найдено копий: 2. Запускается первая, остальные заслонены.' },
         { command: 'git', path: 'C:\\Program Files\\Git\\cmd\\git.exe', version: '2.51.0', shadowed: [], note: null },
       ],
+      docker: {
+        installed: true, running: true, version: '28.4.0', note: null, buildCache: 3.4e9, diskFile: 61.2 * GB,
+        images: [
+          { id: 'sha256:1a2b3c4d5e6f7a8b', repository: 'mcr.microsoft.com/mssql/server', tag: '2022-latest', size: 1.61e9, unique: 1.61e9, containers: 1, created: '5 weeks ago' },
+          { id: 'sha256:2b3c4d5e6f7a8b9c', repository: 'postgres', tag: '17', size: 4.38e8, unique: 4.38e8, containers: 1, created: '3 weeks ago' },
+          { id: 'sha256:3c4d5e6f7a8b9c0d', repository: 'ollama/ollama', tag: 'latest', size: 3.9e9, unique: 3.9e9, containers: 0, created: '2 months ago' },
+          { id: 'sha256:4d5e6f7a8b9c0d1e', repository: 'rabbitmq', tag: '3-management', size: 2.55e8, unique: 2.55e8, containers: 1, created: '4 months ago' },
+          { id: 'sha256:5e6f7a8b9c0d1e2f', repository: '<none>', tag: '<none>', size: 8.9e8, unique: 8.9e8, containers: 0, created: '6 months ago' },
+          { id: 'sha256:6f7a8b9c0d1e2f3a', repository: 'shipnbuy-api', tag: 'dev', size: 2.31e8, unique: 1.1e7, containers: 1, created: '2 days ago' },
+        ],
+        containers: [
+          { id: 'a1', name: 'sql2022', image: 'mcr.microsoft.com/mssql/server:2022-latest', state: 'running', status: 'Up 3 hours', size: 1.2e8 },
+          { id: 'b2', name: 'pg17', image: 'postgres:17', state: 'running', status: 'Up 3 hours', size: 6.3e4 },
+          { id: 'c3', name: 'rabbit', image: 'rabbitmq:3-management', state: 'exited', status: 'Exited (0) 9 days ago', size: 2.1e5 },
+          { id: 'd4', name: 'shipnbuy-api-1', image: 'shipnbuy-api:dev', state: 'exited', status: 'Exited (137) 2 days ago', size: 1.4e6 },
+        ],
+        volumes: [
+          { name: 'sql2022-data', size: 2.9e9, links: 1 }, { name: 'pg17-data', size: 6.1e8, links: 1 },
+          { name: '3f9a0c2d7e8b1a4c5d6e', size: 1.4e8, links: 0 },
+        ],
+      },
+      projects: [
+        { path: 'C:\\GIT\\lotralogistics-app-next', name: 'lotralogistics-app-next', dependencies: 34, devDependencies: 18, modulesSize: 1.21 * GB, lastModified: t - 86400 * 40 },
+        { path: 'C:\\GIT\\glissando', name: 'glissando', dependencies: 22, devDependencies: 15, modulesSize: 0.62 * GB, lastModified: t - 86400 * 61 },
+        { path: 'C:\\GIT\\SysWatch\\src\\ui', name: 'syswatch-ui', dependencies: 5, devDependencies: 6, modulesSize: 0.19 * GB, lastModified: t - 600 },
+        { path: 'C:\\GIT\\knoblet', name: 'knoblet', dependencies: 12, devDependencies: 9, modulesSize: 0.48 * GB, lastModified: t - 86400 * 25 },
+      ],
       path: [
         { dir: 'C:\\Program Files\\Common Files\\Oracle\\Java\\javapath', scope: 'system', exists: true, duplicate: false },
         { dir: '%SystemRoot%\\system32', scope: 'system', exists: true, duplicate: false },
@@ -394,6 +421,52 @@ function historyMock(days: number, q: string, source: string, kind: string) {
     searches: f.filter(i => i.kind === 'search').length, visits: f.filter(i => i.kind === 'visit').length,
     domains: [...dom.values()].sort((a, b) => b.visits - a.visits),
   };
+}
+
+function gpuMock(range: number) {
+  const t = now();
+  const step = 60 * Math.max(1, Math.ceil(range / 720));
+  const first = t - range * 60 - ((t - range * 60) % step);
+  const n = Math.floor((t - first) / step) + 1;
+  const ts = Array.from({ length: n }, (_, i) => first + i * step);
+  const wave = (i: number, base: number, amp: number) => Math.max(0, base + amp * Math.sin(i / 9) + (Math.random() - 0.5) * amp * 0.6);
+  const util = ts.map((_, i) => wave(i, 18, 15));
+  return {
+    hasData: true, ts,
+    adapters: [
+      { key: '0x00000000_0x0000D1C1', name: 'NVIDIA GeForce RTX 4060 Laptop GPU', memTotal: 8 * GB, util: 23, temp: 61, power: 34, fan: 2150, memUsed: 2.7 * GB, lastTs: t - 40, avgUtil: 17.2, peakUtil: 97, peakTemp: 84, avgTemp: 56 },
+      { key: '0x00000000_0x0000C9A0', name: 'Intel(R) Iris(R) Xe Graphics', memTotal: 0, util: 6, temp: null, power: null, fan: null, memUsed: 0.4 * GB, lastTs: t - 40, avgUtil: 5.1, peakUtil: 41, peakTemp: null, avgTemp: null },
+    ],
+    series: [
+      { adapter: '0x00000000_0x0000D1C1', util, util3D: util.map(v => v * 0.8), video: util.map(v => v * 0.25), compute: util.map((v, i) => (i % 40 < 6 ? 60 : 0)),
+        mem: ts.map((_, i) => (2.2 + Math.sin(i / 30) * 0.6) * GB), temp: util.map(v => 42 + v * 0.5) },
+      { adapter: '0x00000000_0x0000C9A0', util: util.map(v => v * 0.3), util3D: util.map(v => v * 0.2), video: util.map(v => v * 0.1), compute: util.map(() => 0),
+        mem: ts.map(() => 0.4 * GB), temp: ts.map(() => null) },
+    ],
+    apps: [
+      { name: 'chrome.exe', adapter: '0x00000000_0x0000D1C1', avgUtil: 6.2, peakUtil: 41, memMax: 0.9 * GB, minutes: 600 },
+      { name: 'Code.exe', adapter: '0x00000000_0x0000D1C1', avgUtil: 2.1, peakUtil: 18, memMax: 0.31 * GB, minutes: 700 },
+      { name: 'ollama.exe', adapter: '0x00000000_0x0000D1C1', avgUtil: 4.8, peakUtil: 97, memMax: 5.1 * GB, minutes: 35 },
+      { name: 'dwm.exe', adapter: '0x00000000_0x0000C9A0', avgUtil: 3.4, peakUtil: 22, memMax: 0.21 * GB, minutes: 1440 },
+      { name: 'Telegram.exe', adapter: '0x00000000_0x0000C9A0', avgUtil: 0.6, peakUtil: 9, memMax: 0.08 * GB, minutes: 900 },
+    ],
+  };
+}
+
+function crashMock(days: number) {
+  const t = now();
+  const items = [
+    { ts: t - 3600 * 5, kind: 'gpu', title: 'Видеодрайвер перестал отвечать и был восстановлен', detail: 'Экран мог погаснуть на пару секунд. Частая причина — перегрев, разгон или нестабильный драйвер.', app: null, source: 'Display', eventId: 4101 },
+    { ts: t - 3600 * 5 + 40, kind: 'gpu', title: 'Сбой видеодрайвера (LiveKernelEvent)', detail: 'Windows сохранила отчёт о сбросе видеокарты.', app: null, source: 'Windows Error Reporting', eventId: 1001 },
+    { ts: t - 86400 * 2, kind: 'app', title: 'Программа аварийно завершилась', detail: 'Модуль: ntdll.dll, код 0xc0000374', app: 'Sideloadly.exe', source: 'Application Error', eventId: 1000 },
+    { ts: t - 86400 * 3, kind: 'hang', title: 'Программа зависла и была закрыта', detail: 'Окно не отвечало, Windows завершило программу.', app: 'devenv.exe', source: 'Application Hang', eventId: 1002 },
+    { ts: t - 86400 * 6, kind: 'power', title: 'Внезапное выключение', detail: 'Компьютер выключился без завершения работы: пропало питание, зависание или удерживали кнопку питания.', app: null, source: 'Microsoft-Windows-Kernel-Power', eventId: 41 },
+    { ts: t - 86400 * 12, kind: 'bsod', title: 'Синий экран (BSOD)', detail: 'Код остановки 0x00000116. Дамп памяти: C:\\Windows\\MEMORY.DMP', app: null, source: 'Microsoft-Windows-WER-SystemErrorReporting', eventId: 1001 },
+    { ts: t - 86400 * 20, kind: 'update', title: 'Обновление Windows не установилось', detail: '2026-09 Cumulative Update for Windows 11 Version 24H2 (KB5065426)', app: null, source: 'Microsoft-Windows-WindowsUpdateClient', eventId: 20 },
+  ].filter(c => c.ts >= t - days * 86400);
+  const counts: Record<string, number> = {};
+  for (const c of items) counts[c.kind] = (counts[c.kind] ?? 0) + 1;
+  return { days, items, counts };
 }
 
 function anomalies() {
@@ -565,6 +638,11 @@ export function mockApi(req: IncomingMessage, res: ServerResponse, next: () => v
       case '/api/disk': return diskState(u.searchParams.get('root'));
       case '/api/connections': return connections();
       case '/api/dev': return devMock();
+      case '/api/gpu': return gpuMock(range);
+      case '/api/system/crashes': return crashMock(Number(u.searchParams.get('days') ?? 30));
+      case '/api/dev/docker': return { ok: true, message: 'Готово.' };
+      case '/api/dev/node-modules': return { ok: true, message: 'node_modules удалена.' };
+      case '/api/history/delete': return { ok: false, message: 'Сначала нужно закрыть: Edge.', deleted: 0, running: ['Edge'] };
       case '/api/history': return historyMock(Number(u.searchParams.get('days') ?? 7), u.searchParams.get('q') ?? '', u.searchParams.get('source') ?? '', u.searchParams.get('kind') ?? '');
       case '/api/report': return reportMock(Number(u.searchParams.get('days') ?? 7));
       case '/api/report/export': return { ok: true, path: 'C:\\Users\\ANTRARES\\Documents\\SysWatch\\Отчёт SysWatch 2026-10-16 — 2026-10-23 10-40.html' };

@@ -233,6 +233,12 @@ async function postJson<T>(path: string): Promise<T> {
   return r.json() as Promise<T>;
 }
 
+async function postBody<T>(path: string, body: unknown): Promise<T> {
+  const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+  return r.json() as Promise<T>;
+}
+
 async function post(path: string, body?: unknown): Promise<void> {
   const r = await fetch(path, {
     method: 'POST',
@@ -323,16 +329,25 @@ export interface DevGroup { id: string; title: string; hint: string | null; item
 export interface DevService { name: string; display: string; state: string; startMode: string; pid: number | null; memory: number | null; path: string | null }
 export interface CommandResolution { command: string; path: string | null; version: string | null; shadowed: string[]; note: string | null }
 export interface PathEntry { dir: string; scope: 'system' | 'user'; exists: boolean; duplicate: boolean }
+export interface DockerImage { id: string; repository: string; tag: string; size: number; unique: number; containers: number; created: string }
+export interface DockerContainer { id: string; name: string; image: string; state: string; status: string; size: number }
+export interface DockerVolume { name: string; size: number; links: number }
+export interface DockerInfo {
+  installed: boolean; running: boolean; version: string | null; note: string | null;
+  images: DockerImage[]; containers: DockerContainer[]; volumes: DockerVolume[]; buildCache: number; diskFile: number | null;
+}
+export interface NodeProject { path: string; name: string; dependencies: number; devDependencies: number; modulesSize: number; lastModified: number }
 export interface DevEnvironment {
   scannedAt: number; seconds: number; groups: DevGroup[]; services: DevService[];
-  commands: CommandResolution[]; path: PathEntry[];
+  commands: CommandResolution[]; path: PathEntry[]; docker: DockerInfo | null; projects: NodeProject[];
 }
 export interface DevState { busy: boolean; data: DevEnvironment | null }
 
 
 // ── История браузеров ──
 
-export interface BrowserProfile { id: string; browser: string; profile: string; ok: boolean; error: string | null; visits: number; searches: number }
+export interface BrowserProfile { id: string; browser: string; profile: string; ok: boolean; error: string | null; visits: number; searches: number; db: string }
+export interface HistoryDeleteResult { ok: boolean; message: string; deleted: number; running: string[] }
 export interface HistoryItem { ts: number; source: string; kind: 'visit' | 'search'; url: string; title: string | null; domain: string; term: string | null; engine: string | null }
 export interface DomainStat { domain: string; visits: number; last: number; sources: string[] }
 export interface HistoryResult {
@@ -340,11 +355,32 @@ export interface HistoryResult {
   searches: number; visits: number; domains: DomainStat[];
 }
 
+
+// ── Видеокарта и сбои ──
+
+export interface GpuAdapterView {
+  key: string; name: string; memTotal: number; util: number | null; temp: number | null; power: number | null; fan: number | null;
+  memUsed: number | null; lastTs: number | null; avgUtil: number; peakUtil: number; peakTemp: number | null; avgTemp: number | null;
+}
+export interface GpuSeries { adapter: string; util: (number | null)[]; util3D: (number | null)[]; video: (number | null)[]; compute: (number | null)[]; mem: (number | null)[]; temp: (number | null)[] }
+export interface GpuApp { name: string; adapter: string; avgUtil: number; peakUtil: number; memMax: number; minutes: number }
+export interface GpuView { hasData: boolean; ts: number[]; adapters: GpuAdapterView[]; series: GpuSeries[]; apps: GpuApp[] }
+
+export type CrashKind = 'gpu' | 'bsod' | 'power' | 'app' | 'hang' | 'disk' | 'hardware' | 'update';
+export interface Crash { ts: number; kind: CrashKind; title: string; detail: string; app: string | null; source: string; eventId: number }
+export interface CrashList { days: number; items: Crash[]; counts: Partial<Record<CrashKind, number>> }
+
 export const api = {
+  gpu: (range: number) => get<GpuView>(`/api/gpu?range=${range}`),
+  crashes: (days: number) => get<CrashList>(`/api/system/crashes?days=${days}`),
+  historyDelete: (req: { items?: { source: string; url: string }[]; domain?: string; sources?: string[]; closeBrowsers: boolean; clearProfiles?: string[]; clearFrom?: number }) =>
+    postBody<HistoryDeleteResult>('/api/history/delete', req),
   history: (days: number, q: string, source: string, kind: string) =>
     get<HistoryResult>(`/api/history?days=${days}&q=${encodeURIComponent(q)}&source=${encodeURIComponent(source)}&kind=${kind}`),
   dev: (refresh = false) => get<DevState>(`/api/dev${refresh ? '?refresh=1' : ''}`),
   devService: (name: string, action: 'start' | 'stop' | 'auto' | 'manual' | 'disabled') => postJson<ActionResult>(`/api/dev/service?name=${encodeURIComponent(name)}&action=${action}`),
+  dockerAction: (action: string, id = '') => postJson<ActionResult>(`/api/dev/docker?action=${action}&id=${encodeURIComponent(id)}`),
+  deleteNodeModules: (path: string) => postJson<ActionResult>(`/api/dev/node-modules?path=${encodeURIComponent(path)}`),
   devOpen: (path: string) => postJson<ActionResult>(`/api/dev/open?path=${encodeURIComponent(path)}`),
   report: (days: number) => get<Report>(`/api/report?days=${days}`),
   reportExport: (days: number) => postJson<{ ok: boolean; path: string }>(`/api/report/export?days=${days}`),

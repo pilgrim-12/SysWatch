@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, type Live } from './api';
 import { ago, bytes, pct } from './format';
 import { Scopes, emptyHistory, pushLive, type LiveHistory } from './components/Scopes';
-import { BrandMark, IconAlert, IconApps, IconChip, IconDisk, IconHeat, IconLink, IconList, IconNet, IconClock, IconCode, IconPulse, IconReport } from './components/Icons';
+import { BrandMark, IconAlert, IconApps, IconChip, IconDisk, IconHeat, IconLink, IconList, IconNet, IconClock, IconCode, IconGpu, IconPulse, IconReport } from './components/Icons';
 import { Now } from './screens/Now';
 import { Timeline } from './screens/Timeline';
 import { Network } from './screens/Network';
@@ -16,8 +16,9 @@ import { System } from './screens/System';
 import { Report } from './screens/Report';
 import { Dev } from './screens/Dev';
 import { History } from './screens/History';
+import { Gpu } from './screens/Gpu';
 
-type Screen = 'now' | 'connections' | 'timeline' | 'network' | 'anomalies' | 'disk' | 'programs' | 'system' | 'report' | 'dev' | 'history' | 'events';
+type Screen = 'now' | 'connections' | 'timeline' | 'network' | 'anomalies' | 'disk' | 'programs' | 'system' | 'gpu' | 'report' | 'dev' | 'history' | 'events';
 
 const NAV: { key: Screen; label: string; icon: () => JSX.Element }[] = [
   { key: 'now', label: 'Сейчас', icon: IconPulse },
@@ -28,6 +29,7 @@ const NAV: { key: Screen; label: string; icon: () => JSX.Element }[] = [
   { key: 'disk', label: 'Диск', icon: IconDisk },
   { key: 'programs', label: 'Программы', icon: IconApps },
   { key: 'system', label: 'Система', icon: IconChip },
+  { key: 'gpu', label: 'Видеокарта', icon: IconGpu },
   { key: 'dev', label: 'Разработка', icon: IconCode },
   { key: 'history', label: 'История', icon: IconClock },
   { key: 'report', label: 'Отчёт', icon: IconReport },
@@ -132,6 +134,8 @@ export function App() {
             <Connections onApp={setApp} />
           ) : screen === 'system' ? (
             <System onApp={setApp} />
+          ) : screen === 'gpu' ? (
+            <Gpu range={range} setRange={setRange} onApp={setApp} />
           ) : screen === 'history' ? (
             <History />
           ) : screen === 'dev' ? (

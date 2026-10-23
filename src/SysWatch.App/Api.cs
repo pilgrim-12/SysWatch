@@ -15,7 +15,7 @@ namespace SysWatch.App;
 
 /// <summary>Маршрутизатор /api/* для интерфейса. Возвращает (код, JSON).</summary>
 public sealed class Api(Queries queries, LiveSampler live, AnomalyStore anomalies, DiskService disk, Connections connections,
-    Installed programs, Firewall firewall, GeoIp geo, Startup startup, Hardware hardware, Insights insights, DevEnv dev, BrowserHistory history)
+    Installed programs, Firewall firewall, GeoIp geo, Startup startup, Hardware hardware, Insights insights, DevEnv dev, BrowserHistory history, GpuQueries gpu)
 {
     private static readonly JsonSerializerOptions Json = new()
     {
@@ -62,6 +62,11 @@ public sealed class Api(Queries queries, LiveSampler live, AnomalyStore anomalie
                     return (200, Serialize(Hardware.Battery()));
                 case "/api/system/wakes" when method == "GET":
                     return (200, Serialize(Hardware.Wakes()));
+                case "/api/system/crashes" when method == "GET":
+                {
+                    int cd = int.TryParse(q["days"], out var cdv) ? cdv : 30;
+                    return (200, Serialize(await Task.Run(() => Crashes.List(cd))));
+                }
                 case "/api/system/cpu" when method == "GET":
                     return (200, Serialize(hardware.Cpu()));
 
@@ -73,10 +78,26 @@ public sealed class Api(Queries queries, LiveSampler live, AnomalyStore anomalie
                     return (200, Serialize(res));
                 }
 
+                case "/api/history/delete" when method == "POST":
+                {
+                    var req = JsonSerializer.Deserialize<DeleteRequest>(body ?? "{}", Json) ?? new DeleteRequest(null, null, null, false);
+                    return (200, Serialize(await Task.Run(() => history.Delete(req))));
+                }
+
                 case "/api/dev" when method == "GET":
                     return (200, Serialize(dev.State(q["refresh"] == "1")));
                 case "/api/dev/service" when method == "POST":
                     return (200, Serialize(dev.ServiceAction(q["name"] ?? "", q["action"] ?? "")));
+                case "/api/dev/docker" when method == "POST":
+                {
+                    var (a, id) = (q["action"] ?? "", q["id"] ?? "");
+                    return (200, Serialize(await Task.Run(() => dev.DockerAction(a, id))));
+                }
+                case "/api/dev/node-modules" when method == "POST":
+                {
+                    var proj = q["path"] ?? "";
+                    return (200, Serialize(await Task.Run(() => dev.DeleteNodeModules(proj))));
+                }
                 case "/api/dev/open" when method == "POST":
                 {
                     // Папку открываем, файл (git.exe, диск WSL) — показываем выделенным в его папке.
@@ -144,6 +165,7 @@ public sealed class Api(Queries queries, LiveSampler live, AnomalyStore anomalie
                     "/api/network" => queries.Network(range),
                     "/api/app" => queries.App(q["name"] ?? "", range),
                     "/api/events" => queries.Events(range),
+                    "/api/gpu" => gpu.Get(range),
                     "/api/report" => BuildReport(q["days"]),
                     "/api/report/export" when method == "POST" => Export(q["days"]),
                     "/api/why" => insights.Explain(L(q["from"]), L(q["to"])),

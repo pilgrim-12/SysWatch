@@ -745,3 +745,22 @@ ul.plain li { padding: 2px 0; }
 .hist-bar { position: relative; height: 18px; display: flex; align-items: center; }
 .hist-bar i { position: absolute; left: 0; top: 3px; bottom: 3px; background: rgb(79 195 217 / 0.25); border-radius: 3px; min-width: 2px; }
 .hist-bar span { position: relative; padding-left: 8px; font-size: 13px; }
+.hist-line { display: flex; align-items: center; border-bottom: 1px solid var(--grid); }
+.hist-line:last-child { border-bottom: 0; }
+.hist-line.sel { background: rgb(79 195 217 / 0.08); }
+.hist-line .hist-row { flex: 1; border-bottom: 0; min-width: 0; }
+.hist-check { margin-left: 14px; accent-color: var(--net); }
+.day-check { color: var(--paper); font-size: inherit; font-weight: inherit; }
+.sel-bar { display: inline-flex; gap: 12px; align-items: center; margin-left: auto; font-size: 13px; }
+.link.danger-link { color: var(--warn); }
+
+/* ── Сбои и видеокарта ── */
+.crash-row { display: grid; grid-template-columns: 120px 1fr auto; gap: 12px; padding: 9px 14px; border-bottom: 1px solid var(--grid); align-items: baseline; }
+.crash-row:last-child { border-bottom: 0; }
+.crash-main b { font-weight: 500; margin: 0 8px; }
+.crash-main .dim { color: var(--muted); font-size: 13px; margin-top: 3px; }
+.chip[aria-pressed='true'] { border-color: var(--net); background: rgb(79 195 217 / 0.12); }
+.gpu-big { display: flex; align-items: baseline; gap: 10px; margin-top: 8px; }
+.gpu-big b { font-size: 30px; font-weight: 600; color: #7EE0A1; line-height: 1; }
+.gpu-big span { color: var(--muted); font-size: 13px; }
+.chart-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 14px; }

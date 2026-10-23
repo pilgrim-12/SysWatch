@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api, type DevGroup, type DevItem, type DevService, type DevState } from '../api';
-import { ago, bytes } from '../format';
+import { api, type DevGroup, type DevItem, type DevService, type DevState, type DockerInfo, type NodeProject } from '../api';
+import { ago, bytes, dayTime } from '../format';
 
-type Tab = 'tools' | 'services' | 'path';
+type Tab = 'tools' | 'docker' | 'projects' | 'services' | 'path';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'tools', label: 'Инструменты и версии' },
+  { key: 'docker', label: 'Docker' },
+  { key: 'projects', label: 'Проекты Node' },
   { key: 'services', label: 'Службы' },
   { key: 'path', label: 'Команды и PATH' },
 ];
@@ -99,6 +101,8 @@ export function Dev() {
               {TABS.map(t => (
                 <button key={t.key} role="tab" aria-pressed={tab === t.key} onClick={() => setTab(t.key)}>
                   {t.label}
+                  {t.key === 'docker' && (data.docker?.images.length ?? 0) > 0 && <span className="seg-count">{data.docker!.images.length}</span>}
+                  {t.key === 'projects' && data.projects.length > 0 && <span className="seg-count">{data.projects.length}</span>}
                   {t.key === 'services' && running.length > 0 && <span className="seg-count">{running.length}</span>}
                   {t.key === 'path' && pathIssues > 0 && <span className="seg-count warn">{pathIssues}</span>}
                 </button>
@@ -116,6 +120,8 @@ export function Dev() {
             <GroupView key={g.id} group={g} q={q} onlyIssues={onlyIssues} onUninstall={uninstall}
               onOpen={p => api.devOpen(p).then(r => !r.ok && setMsg(r.message))} />
           ))}
+          {tab === 'docker' && <DockerView info={data.docker} onDone={(m) => { setMsg(m); reload(); }} />}
+          {tab === 'projects' && <Projects list={data.projects} onDone={(m) => { setMsg(m); reload(); }} onOpen={p => api.devOpen(p)} />}
           {tab === 'services' && <Services list={data.services} onAction={service} />}
           {tab === 'path' && <PathView data={data} />}
         </>
@@ -251,6 +257,155 @@ function PathView({ data }: { data: NonNullable<DevState['data']> }) {
         </div>
         <p className="hint-line">Порядок важен: при одинаковых именах запускается файл из папки, которая выше. Изменить PATH: «Параметры → Система → О системе → Дополнительные параметры → Переменные среды».</p>
       </section>
+    </>
+  );
+}
+
+// ── Docker ──────────────────────────────────────────────────
+
+function DockerView({ info, onDone }: { info: DockerInfo | null; onDone: (msg: string) => void }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  if (!info || !info.installed) return <div className="panel"><div className="empty">Docker не установлен.</div></div>;
+
+  const act = async (action: string, id: string, question: string) => {
+    if (!confirm(question)) return;
+    setBusy(action + id);
+    try { const r = await api.dockerAction(action, id); onDone(r.message); }
+    finally { setBusy(null); }
+  };
+
+  const imagesSize = info.images.reduce((s, i) => s + i.size, 0);
+  const dangling = info.images.filter(i => i.repository === '<none>').length;
+  const stopped = info.containers.filter(c => c.state !== 'running').length;
+
+  return (
+    <>
+      {info.note && <div className="note">{info.note}</div>}
+      {info.running && (
+        <div className="facts" style={{ marginBottom: 16 }}>
+          <div className="fact"><b>{info.images.length}</b><span>образов, {bytes(imagesSize)}</span></div>
+          <div className="fact"><b>{info.containers.length}</b><span>контейнеров, остановлено {stopped}</span></div>
+          <div className="fact"><b>{info.volumes.length}</b><span>томов, {bytes(info.volumes.reduce((s, v) => s + v.size, 0))}</span></div>
+          <div className="fact"><b style={{ color: 'var(--disk)' }}>{info.diskFile ? bytes(info.diskFile) : '—'}</b><span>файл диска Docker на Windows</span></div>
+        </div>
+      )}
+      {info.running && (
+        <div className="filters" style={{ marginBottom: 14 }}>
+          <button className="btn" disabled={!!busy || dangling === 0} onClick={() => act('prune-images', '', `Удалить ${dangling} образов без имени (<none>)? Их не использует ни один контейнер.`)}>Удалить образы без имени{dangling ? ` (${dangling})` : ''}</button>
+          <button className="btn" disabled={!!busy || stopped === 0} onClick={() => act('prune-containers', '', `Удалить все остановленные контейнеры (${stopped})? Данные внутри них пропадут, тома останутся.`)}>Удалить остановленные контейнеры</button>
+          <button className="btn" disabled={!!busy || info.buildCache === 0} onClick={() => act('prune-cache', '', 'Очистить кэш сборки? Следующая сборка образов будет дольше.')}>Очистить кэш сборки {info.buildCache ? `(${bytes(info.buildCache)})` : ''}</button>
+        </div>
+      )}
+
+      {info.images.length > 0 && (
+        <section className="block">
+          <h2>Образы <small>Docker {info.version}</small></h2>
+          <div className="panel">
+            <table className="table dev-table">
+              <thead><tr><th style={{ textAlign: 'left' }}>Образ</th><th style={{ textAlign: 'left' }}>Создан</th><th>Размер</th><th>Контейнеров</th><th /></tr></thead>
+              <tbody>
+                {info.images.map(i => (
+                  <tr key={i.id}>
+                    <td className="dev-name"><b>{i.repository === '<none>' ? 'без имени' : i.repository}</b>{i.tag && i.tag !== '<none>' && <code>{i.tag}</code>}<div className="dim">{i.id.replace('sha256:', '').slice(0, 12)}</div></td>
+                    <td style={{ textAlign: 'left' }} className="dim">{i.created}</td>
+                    <td style={{ color: 'var(--disk)' }}>{bytes(i.size)}{i.unique > 0 && i.unique < i.size && <div className="dim" style={{ fontSize: 12 }}>своих {bytes(i.unique)}</div>}</td>
+                    <td>{i.containers || '—'}</td>
+                    <td className="dev-act">
+                      <button className="link" disabled={!!busy} onClick={() => act('rmi', i.id, `Удалить образ ${i.repository}:${i.tag}? Его можно будет скачать заново.`)}>Удалить</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {info.containers.length > 0 && (
+        <section className="block">
+          <h2>Контейнеры</h2>
+          <div className="panel">
+            <table className="table dev-table">
+              <tbody>
+                {info.containers.map(c => (
+                  <tr key={c.id}>
+                    <td className="dev-name"><b>{c.name}</b><div className="dim">{c.image}</div></td>
+                    <td style={{ textAlign: 'left' }}><span className={`agent-dot ${c.state === 'running' ? '' : 'off'}`} />{c.status}</td>
+                    <td>{c.size ? bytes(c.size) : ''}</td>
+                    <td className="dev-act">
+                      {c.state === 'running'
+                        ? <button className="link" disabled={!!busy} onClick={() => act('stop', c.id, `Остановить контейнер ${c.name}?`)}>Остановить</button>
+                        : <button className="link" disabled={!!busy} onClick={() => act('rm', c.id, `Удалить контейнер ${c.name}? Данные внутри него (кроме томов) пропадут.`)}>Удалить</button>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {info.volumes.length > 0 && (
+        <section className="block">
+          <h2>Тома <small>здесь хранятся данные баз и сервисов</small></h2>
+          <div className="panel">
+            <table className="table dev-table">
+              <tbody>
+                {info.volumes.map(v => (
+                  <tr key={v.name}>
+                    <td className="dev-name"><b>{v.name}</b></td>
+                    <td className="dim" style={{ textAlign: 'left' }}>{v.links ? `используют контейнеров: ${v.links}` : 'не используется'}</td>
+                    <td style={{ color: 'var(--disk)' }}>{v.size ? bytes(v.size) : ''}</td>
+                    <td className="dev-act">
+                      {v.links === 0 && <button className="link" disabled={!!busy} onClick={() => act('volume-rm', v.name, `Удалить том ${v.name}? Данные в нём (например, база) пропадут безвозвратно.`)}>Удалить</button>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+      <p className="hint-line">Удаление освобождает место внутри Docker, но файл его диска на Windows сам не уменьшается. Сжать его: Docker Desktop → Troubleshoot → Clean / Purge data, либо Optimize-VHD для файла диска при выключенном Docker.</p>
+    </>
+  );
+}
+
+// ── Проекты Node ────────────────────────────────────────────
+
+function Projects({ list, onDone, onOpen }: { list: NodeProject[]; onDone: (msg: string) => void; onOpen: (p: string) => void }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  if (!list.length) return <div className="panel"><div className="empty">Проектов с node_modules в папках разработки (C:\GIT, source\repos, Projects…) не найдено.</div></div>;
+  const total = list.reduce((s, p) => s + p.modulesSize, 0);
+  const del = async (p: NodeProject) => {
+    if (!confirm(`Удалить node_modules в «${p.name}» (${bytes(p.modulesSize)})? Удаление без Корзины; вернуть — командой npm install в папке проекта.`)) return;
+    setBusy(p.path);
+    try { const r = await api.deleteNodeModules(p.path); onDone(r.message); } finally { setBusy(null); }
+  };
+  return (
+    <>
+      <p className="hint-line" style={{ marginTop: 0, marginBottom: 12 }}>
+        Все node_modules вместе занимают <b style={{ color: 'var(--disk)' }}>{bytes(total)}</b>. Для давно не тронутых проектов их можно удалить и вернуть потом одной командой npm install.
+      </p>
+      <div className="panel">
+        <table className="table dev-table">
+          <thead><tr><th style={{ textAlign: 'left' }}>Проект</th><th>Зависимостей</th><th style={{ textAlign: 'left' }}>Изменён</th><th>node_modules</th><th /></tr></thead>
+          <tbody>
+            {list.map(p => (
+              <tr key={p.path}>
+                <td className="dev-name"><b>{p.name}</b><div className="dim">{p.path}</div></td>
+                <td>{p.dependencies}{p.devDependencies ? <span className="dim"> + {p.devDependencies} dev</span> : ''}</td>
+                <td style={{ textAlign: 'left' }} className="dim">{dayTime(p.lastModified)}</td>
+                <td style={{ color: 'var(--disk)' }}>{bytes(p.modulesSize)}</td>
+                <td className="dev-act">
+                  <button className="link dim" onClick={() => onOpen(p.path)}>Папка</button>
+                  <button className="link" disabled={busy === p.path} onClick={() => del(p)}>{busy === p.path ? 'Удаляю…' : 'Удалить node_modules'}</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </>
   );
 }

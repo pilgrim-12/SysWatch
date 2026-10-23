@@ -26,6 +26,7 @@ builder.Services.AddSingleton<SqliteStore>();
 builder.Services.AddHostedService<KernelEtwCollector>();
 builder.Services.AddHostedService<DnsEtwCollector>();
 builder.Services.AddHostedService<ProcessSampler>();
+builder.Services.AddHostedService<GpuSampler>();
 builder.Services.AddHostedService<Flusher>();
 
 var host = builder.Build();

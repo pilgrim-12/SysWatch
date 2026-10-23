@@ -20,6 +20,12 @@ public sealed class AgentOptions
     /// <summary>Сохранять командные строки процессов (могут содержать секреты).</summary>
     public bool StoreCommandLines { get; set; } = true;
 
+    /// <summary>Собирать загрузку, память и температуру видеокарты.</summary>
+    public bool Gpu { get; set; } = true;
+
+    /// <summary>Как часто опрашивать видеокарту.</summary>
+    public int GpuIntervalSeconds { get; set; } = 5;
+
     /// <summary>Сколько дней хранить дневные файлы.</summary>
     public int RetentionDays { get; set; } = 7;
 }

@@ -11,6 +11,7 @@ export const IconChip = () => <svg {...base}><rect x="6" y="6" width="12" height
 export const IconApps = () => <svg {...base}><rect x="3" y="3" width="8" height="8" rx="2" /><rect x="13" y="3" width="8" height="8" rx="2" /><rect x="3" y="13" width="8" height="8" rx="2" /><rect x="13" y="13" width="8" height="8" rx="2" /></svg>;
 export const IconCode = () => <svg {...base}><path d="M8 7l-5 5 5 5M16 7l5 5-5 5M13.5 5l-3 14" /></svg>;
 export const IconClock = () => <svg {...base}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>;
+export const IconGpu = () => <svg {...base}><rect x="2.5" y="6" width="19" height="11" rx="2" /><circle cx="9" cy="11.5" r="2.6" /><path d="M14.5 9.5h4M14.5 13.5h4M5 17v2M9 17v2" /></svg>;
 export const IconReport = () => <svg {...base}><path d="M7 3h7l5 5v13H7z" /><path d="M14 3v5h5" /><path d="M10 17v-3M13 17v-5M16 17v-2" /></svg>;
 
 export const BrandMark = () => (

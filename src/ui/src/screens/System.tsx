@@ -3,8 +3,9 @@ import { api, type CpuInfo, type StartupItem } from '../api';
 import { useLoad } from '../hooks';
 import { COLOR, bytes, dayTime } from '../format';
 import { Plot } from '../components/Plot';
+import { CrashView } from '../components/Crashes';
 
-type Tab = 'startup' | 'disks' | 'battery' | 'wakes' | 'cpu';
+type Tab = 'startup' | 'disks' | 'battery' | 'wakes' | 'cpu' | 'crashes';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'startup', label: 'Автозагрузка' },
@@ -12,6 +13,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'battery', label: 'Батарея' },
   { key: 'wakes', label: 'Пробуждения' },
   { key: 'cpu', label: 'Процессор' },
+  { key: 'crashes', label: 'Сбои' },
 ];
 
 export function System({ onApp }: { onApp: (name: string) => void }) {
@@ -32,6 +34,7 @@ export function System({ onApp }: { onApp: (name: string) => void }) {
       {tab === 'battery' && <BatteryTab />}
       {tab === 'wakes' && <WakesTab />}
       {tab === 'cpu' && <CpuTab />}
+      {tab === 'crashes' && <CrashesTab onApp={onApp} />}
     </>
   );
 }
@@ -249,6 +252,37 @@ function CpuTab() {
         </div>
       </section>
       <p className="hint-line">Если частота падает ниже базовой под нагрузкой, а ограничение меньше 100%, процессор сбрасывает её из-за нагрева или энергосбережения. Температура ядер точнее у самого производителя (например, Armoury Crate на ASUS): Windows без отдельного драйвера видит только тепловые зоны платы.</p>
+    </>
+  );
+}
+
+// ── Сбои ──────────────────────────────────────────────────
+
+const CRASH_DAYS = [7, 30, 90];
+
+function CrashesTab({ onApp }: { onApp: (name: string) => void }) {
+  const [days, setDays] = useState(30);
+  const data = useLoad(() => api.crashes(days), [days]);
+  const c = data.data?.counts ?? {};
+  return (
+    <>
+      <div className="filters" style={{ marginBottom: 14 }}>
+        <div className="seg" role="group" aria-label="Период">
+          {CRASH_DAYS.map(d => <button key={d} aria-pressed={days === d} onClick={() => setDays(d)}>{d} дней</button>)}
+        </div>
+        {data.loading && <span className="dim" style={{ fontSize: 13 }}>Читаю журналы…</span>}
+      </div>
+      {data.error && <div className="error">Не удалось прочитать журналы Windows: {data.error}</div>}
+      {data.data && (
+        <div className="facts" style={{ marginBottom: 16 }}>
+          <div className="fact"><b style={{ color: c.bsod ? 'var(--warn)' : 'var(--ok)' }}>{c.bsod ?? 0}</b><span>синих экранов</span></div>
+          <div className="fact"><b style={{ color: c.power ? 'var(--warn)' : 'var(--ok)' }}>{c.power ?? 0}</b><span>внезапных выключений</span></div>
+          <div className="fact"><b style={{ color: c.gpu ? 'var(--cpu)' : 'var(--ok)' }}>{c.gpu ?? 0}</b><span>сбоев видеодрайвера</span></div>
+          <div className="fact"><b>{(c.app ?? 0) + (c.hang ?? 0)}</b><span>падений и зависаний программ</span></div>
+        </div>
+      )}
+      <CrashView data={data.data} onApp={name => onApp(name.split('\\').pop() ?? name)} />
+      <p className="hint-line">Источник — журналы «Система» и «Приложение» Windows. Ошибки диска и аппаратные ошибки (WHEA) стоит воспринимать всерьёз: они бывают предвестниками отказа.</p>
     </>
   );
 }

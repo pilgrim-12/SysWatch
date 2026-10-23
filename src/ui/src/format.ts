@@ -52,6 +52,8 @@ export const COLOR = {
   disk: '#F27C6B',
   net: '#4FC3D9',
   netTx: '#2E8FA3',
+  gpu: '#7EE0A1',
+  gpu2: '#3E9E68',
   ok: '#6BCF8E',
   warn: '#F27C6B',
 } as const;

@@ -27,7 +27,8 @@ public sealed record CommandResolution(string Command, string? Path, string? Ver
 
 public sealed record DevEnvironment(
     long ScannedAt, double Seconds, IReadOnlyList<DevGroup> Groups, IReadOnlyList<DevService> Services,
-    IReadOnlyList<CommandResolution> Commands, IReadOnlyList<PathEntry> Path);
+    IReadOnlyList<CommandResolution> Commands, IReadOnlyList<PathEntry> Path,
+    DockerInfo? Docker, IReadOnlyList<NodeProject> Projects);
 
 public sealed record DevState(bool Busy, DevEnvironment? Data);
 
@@ -137,7 +138,13 @@ public sealed class DevEnv(Installed installed)
         try { services = Services(); } catch (Exception) { }
 
         var (commands, path) = PathInfo();
-        return new DevEnvironment(DateTimeOffset.UtcNow.ToUnixTimeSeconds(), sw.Elapsed.TotalSeconds, groups, services, commands, path);
+
+        DockerInfo? docker = null;
+        try { docker = Docker.Info(); } catch (Exception) { }
+        var projects = new List<NodeProject>();
+        try { projects = NodeProjects.Scan(); } catch (Exception) { }
+
+        return new DevEnvironment(DateTimeOffset.UtcNow.ToUnixTimeSeconds(), sw.Elapsed.TotalSeconds, groups, services, commands, path, docker, projects);
     }
 
     // ── .NET ─────────────────────────────────────────────────────────────
@@ -236,23 +243,55 @@ public sealed class DevEnv(Installed installed)
         return list;
     }
 
+    /// <summary>
+    /// Глобальные пакеты: у каждого менеджера версий Node своя папка. nvm-windows держит их внутри каждой версии,
+    /// обычный установщик — в %APPDATA%\npm (или в prefix из .npmrc), а pnpm и yarn — в своих папках.
+    /// </summary>
     private static List<DevItem> NpmGlobal()
     {
         var list = new List<DevItem>();
-        var root = Path.Combine(Roaming, "npm", "node_modules");
-        foreach (var dir in Dirs(root))
-        {
-            var name = Path.GetFileName(dir);
-            if (name.StartsWith('@'))
-            {
-                foreach (var sub in Dirs(dir)) list.Add(Pkg(sub, $"{name}/{Path.GetFileName(sub)}"));
-                continue;
-            }
-            list.Add(Pkg(dir, name));
-        }
-        return list.OrderBy(i => i.Name).ToList();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var roots = new List<(string Dir, string Where)> { (Path.Combine(Roaming, "npm", "node_modules"), "npm") };
 
-        static DevItem Pkg(string dir, string name)
+        try
+        {
+            var npmrc = Path.Combine(home, ".npmrc");
+            if (File.Exists(npmrc))
+                foreach (var line in File.ReadLines(npmrc))
+                    if (line.Trim().StartsWith("prefix", StringComparison.OrdinalIgnoreCase) && line.Contains('='))
+                        roots.Add((Path.Combine(Environment.ExpandEnvironmentVariables(line[(line.IndexOf('=') + 1)..].Trim()), "node_modules"), "npm (prefix из .npmrc)"));
+        }
+        catch (Exception) { }
+
+        var nvm = Environment.GetEnvironmentVariable("NVM_HOME", EnvironmentVariableTarget.User)
+                  ?? Environment.GetEnvironmentVariable("NVM_HOME", EnvironmentVariableTarget.Machine)
+                  ?? Path.Combine(Roaming, "nvm");
+        foreach (var d in Dirs(nvm).Where(d => Path.GetFileName(d).StartsWith('v')))
+            roots.Add((Path.Combine(d, "node_modules"), "Node " + Path.GetFileName(d)));
+        roots.Add((Path.Combine(Pf, "nodejs", "node_modules"), "Node (установщик)"));
+        foreach (var d in Dirs(Path.Combine(Local, "pnpm", "global")))
+            roots.Add((Path.Combine(d, "node_modules"), "pnpm"));
+        roots.Add((Path.Combine(Local, "Yarn", "Data", "global", "node_modules"), "yarn"));
+
+        foreach (var (root, where) in roots)
+        {
+            if (!seen.Add(root)) continue;
+            foreach (var dir in Dirs(root))
+            {
+                var name = Path.GetFileName(dir);
+                if (name.StartsWith('.')) continue;
+                if (name.StartsWith('@'))
+                {
+                    foreach (var sub in Dirs(dir)) list.Add(Pkg(sub, $"{name}/{Path.GetFileName(sub)}", where));
+                    continue;
+                }
+                list.Add(Pkg(dir, name, where));
+            }
+        }
+        return list.OrderBy(i => i.Name).ThenBy(i => i.Note).ToList();
+
+        static DevItem Pkg(string dir, string name, string where)
         {
             string v = "";
             try
@@ -261,7 +300,8 @@ public sealed class DevEnv(Installed installed)
                 v = doc.RootElement.TryGetProperty("version", out var e) ? e.GetString() ?? "" : "";
             }
             catch (Exception) { }
-            return new DevItem(name, v, dir, null, null, null, null, null);
+            bool bundled = name is "npm" or "corepack";
+            return new DevItem(name, v, dir, DirSize(dir), null, null, bundled ? where + ", входит в Node" : where, null);
         }
     }
 
@@ -621,6 +661,26 @@ public sealed class DevEnv(Installed installed)
         return code == 0
             ? new(true, action switch { "start" => "Служба запускается.", "stop" => "Служба останавливается.", _ => "Тип запуска изменён." })
             : new(false, (output ?? "").Trim().Split('\n').LastOrDefault(l => l.Trim().Length > 0)?.Trim() ?? $"Ошибка {code}");
+    }
+
+    /// <summary>Действие с Docker; после него перечитываем только Docker, а не всё окружение.</summary>
+    public ActionResult DockerAction(string action, string id)
+    {
+        var r = Docker.Act(action, id);
+        DockerInfo? fresh = null;
+        try { fresh = Docker.Info(); } catch (Exception) { }
+        lock (_gate) if (_data is not null && fresh is not null) _data = _data with { Docker = fresh };
+        return r;
+    }
+
+    public ActionResult DeleteNodeModules(string project)
+    {
+        IReadOnlyList<NodeProject> known;
+        lock (_gate) known = _data?.Projects ?? [];
+        var r = NodeProjects.DeleteModules(project, known.ToList());
+        if (r.Ok)
+            lock (_gate) if (_data is not null) _data = _data with { Projects = _data.Projects.Where(p => !p.Path.Equals(project, StringComparison.OrdinalIgnoreCase)).ToList() };
+        return r;
     }
 
     public IReadOnlyList<DevService> TryServices()
