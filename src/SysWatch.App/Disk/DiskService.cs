@@ -29,7 +29,8 @@ public sealed class DiskService
     private readonly string _system = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows))!;
 
     private string _status = "idle";
-    private string? _progress, _error, _busyRoot;
+    // Текст прогресса — русский шаблон и аргумент: переводится при каждом запросе состояния на язык окна.
+    private string? _progTpl, _progArg, _progRaw, _error, _busyRoot;
     private OpProgress? _op;
     private CleanupView? _cleanup;
     private CleanupResult? _lastClean;
@@ -50,7 +51,7 @@ public sealed class DiskService
                 if (!d.IsReady) continue;
                 list.Add(new DriveInfoView(
                     d.RootDirectory.FullName,
-                    string.IsNullOrWhiteSpace(d.VolumeLabel) ? (d.DriveType == DriveType.Removable ? "Съёмный диск" : "Локальный диск") : d.VolumeLabel,
+                    string.IsNullOrWhiteSpace(d.VolumeLabel) ? (d.DriveType == DriveType.Removable ? L.T("Съёмный диск") : L.T("Локальный диск")) : d.VolumeLabel,
                     d.DriveFormat,
                     d.DriveType == DriveType.Removable ? "removable" : "fixed",
                     d.TotalSize, d.TotalFreeSpace,
@@ -83,8 +84,12 @@ public sealed class DiskService
 
         bool isSystem = root.Equals(_system, StringComparison.OrdinalIgnoreCase);
         lock (_gate)
-            return new DiskState(_status, _progress, _op, _busyRoot, drives, root, snap, compare,
-                isSystem ? _cleanup : null, isSystem ? _lastClean : null, _error);
+        {
+            string? progress = Progress();
+            var op = _op is not null && _progRaw is not null && _op.Current == _progRaw ? _op with { Current = progress } : _op;
+            return new DiskState(_status, progress, op, _busyRoot, drives, root, snap, compare,
+                isSystem ? Localize(_cleanup) : null, isSystem ? _lastClean : null, _error is null ? null : L.T(_error));
+        }
     }
 
     /// <summary>Снимок диска; для системного диска — ещё и поиск того, что можно очистить.</summary>
@@ -103,11 +108,11 @@ public sealed class DiskService
             {
                 lock (_gate)
                 {
-                    _progress = $"Обхожу {p.Current}";
+                    (_progTpl, _progArg, _progRaw) = (L.K("Обхожу {0}"), p.Current, null);
                     _op = new OpProgress("disk", p.Bytes, used, p.Files, p.Dirs, started, p.Current, 1, steps);
                 }
             }, ct);
-            SetProgress("Проверяю точки восстановления");
+            SetProgress(L.K("Проверяю точки восстановления"));
             var drive = new DriveInfo(target);
             var shadow = DiskScanner.ShadowStorage(target);
             _store.Save(new SnapshotInfo(0, started, target, drive.TotalSize, drive.TotalFreeSpace, result.Size, result.Files, result.Seconds, shadow), result.Nodes);
@@ -115,7 +120,7 @@ public sealed class DiskService
             if (system)
             {
                 lock (_gate) _op = new OpProgress("cleanup", result.Size, used, result.Files, result.Dirs, started, null, 2, steps);
-                var cats = Cleanup.Scan(p => SetProgress($"Ищу, что можно очистить: {p}"), ct);
+                var cats = Cleanup.Scan(p => SetProgress(L.K("Ищу, что можно очистить: {0}"), p), ct);
                 lock (_gate) _cleanup = new CleanupView(Now(), cats);
             }
         });
@@ -123,7 +128,7 @@ public sealed class DiskService
 
     public bool StartCleanupScan() => Start("scanning", _system, ct =>
     {
-        var cats = Cleanup.Scan(p => SetProgress($"Ищу, что можно очистить: {p}"), ct);
+        var cats = Cleanup.Scan(p => SetProgress(L.K("Ищу, что можно очистить: {0}"), p), ct);
         lock (_gate) _cleanup = new CleanupView(Now(), cats);
     });
 
@@ -136,12 +141,12 @@ public sealed class DiskService
         return Start("cleaning", _system, ct =>
         {
             var before = new DriveInfo(_system).TotalFreeSpace;
-            var r = Cleanup.Clean(view.Categories, categories, exclude, p => SetProgress($"Удаляю: {p}"), ct);
+            var r = Cleanup.Clean(view.Categories, categories, exclude, p => SetProgress(L.K("Удаляю: {0}"), p), ct);
             var after = new DriveInfo(_system).TotalFreeSpace;
             // Освобождено по факту диска — точнее суммы размеров, если файлы были жёсткими ссылками.
             lock (_gate) _lastClean = r with { Freed = Math.Max(r.Freed, after - before) };
 
-            var cats = Cleanup.Scan(p => SetProgress($"Пересчитываю: {p}"), ct);
+            var cats = Cleanup.Scan(p => SetProgress(L.K("Пересчитываю: {0}"), p), ct);
             lock (_gate) _cleanup = new CleanupView(Now(), cats);
         });
     }
@@ -168,7 +173,7 @@ public sealed class DiskService
             if (_status != "idle") return false;
             _status = status;
             _busyRoot = root;
-            _progress = null;
+            _progTpl = null; _progArg = null; _progRaw = null;
             _op = new OpProgress(status == "cleaning" ? "clean" : "start", 0, 0, 0, 0, Now(), null, 1, 1);
             _error = null;
             _cts = cts = new CancellationTokenSource();
@@ -178,11 +183,11 @@ public sealed class DiskService
         var thread = new Thread(() =>
         {
             try { work(cts.Token); }
-            catch (OperationCanceledException) { lock (_gate) _error = "Остановлено."; }
+            catch (OperationCanceledException) { lock (_gate) _error = L.K("Остановлено."); }
             catch (Exception ex) { lock (_gate) _error = ex.Message; }
             finally
             {
-                lock (_gate) { _status = "idle"; _progress = null; _op = null; _busyRoot = null; _cts = null; }
+                lock (_gate) { _status = "idle"; _progTpl = null; _progArg = null; _progRaw = null; _op = null; _busyRoot = null; _cts = null; }
                 cts.Dispose();
             }
         })
@@ -192,14 +197,34 @@ public sealed class DiskService
         return true;
     }
 
-    private void SetProgress(string p)
+    /// <param name="tpl">Русский шаблон (L.K) с {0}; arg — подстановка (путь или название категории очистки).</param>
+    private void SetProgress(string tpl, string? arg = null)
     {
         lock (_gate)
         {
-            _progress = p;
-            if (_op is not null) _op = _op with { Current = p };
+            _progTpl = tpl;
+            _progArg = arg;
+            _progRaw = arg is null ? tpl : string.Format(tpl, arg);
+            if (_op is not null) _op = _op with { Current = _progRaw };
         }
     }
+
+    /// <summary>Прогресс на языке текущего запроса. Аргумент тоже пробуем перевести — это может быть название категории.</summary>
+    private string? Progress() =>
+        _progTpl is null ? null : _progArg is null ? L.T(_progTpl) : L.T(_progTpl, L.T(_progArg));
+
+    /// <summary>Категории очистки хранятся по-русски (ключи словаря), переводим при отдаче в окно.</summary>
+    private static CleanupView? Localize(CleanupView? v) => v is null ? null : v with
+    {
+        Categories = v.Categories.Select(c => c with
+        {
+            Title = L.T(c.Title),
+            Description = L.T(c.Description),
+            Hint = c.Hint is null ? null : L.T(c.Hint),
+            // У Корзины вместо пути — подпись; настоящие пути не переводим.
+            Items = c.Items.Select(i => i.Path.Contains('\\') ? i : i with { Path = L.T(i.Path) }).ToList(),
+        }).ToList(),
+    };
 
     // ── Дерево и рост ────────────────────────────────────────────────────
 

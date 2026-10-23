@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { bytes } from '../format';
+import { locale, t } from '../i18n';
 
 export interface MapChild { name: string; isDir: boolean; size: number }
 export interface MapItem { path: string; name: string; isDir: boolean; size: number; delta: number | null; children: MapChild[]; other: number }
@@ -83,7 +84,7 @@ export function Treemap({ items, other, total, onOpen }: {
     });
   }, [items, other, size]);
 
-  const pct = (v: number) => (total > 0 ? `${((v / total) * 100).toFixed(1).replace('.', ',')}% папки` : '');
+  const pct = (v: number) => (total > 0 ? t('{0}% папки', ((v / total) * 100).toLocaleString(locale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })) : '');
   const show = (e: React.MouseEvent, title: string, lines: string[]) => {
     const r = host.current!.getBoundingClientRect();
     setTip({ x: e.clientX - r.left, y: e.clientY - r.top, title, lines });
@@ -99,8 +100,8 @@ export function Treemap({ items, other, total, onOpen }: {
         if (!item) {
           return (
             <div key="other" className="tile other" style={style}
-              onMouseMove={e => show(e, 'Мелкие файлы и папки', [bytes(other), pct(other), 'Каждый объект меньше 100 МБ'])}>
-              {big && <span className="tile-label"><b>Мелкое</b> {bytes(other)}</span>}
+              onMouseMove={e => show(e, t('Мелкие файлы и папки'), [bytes(other), pct(other), t('Каждый объект меньше 100 МБ')])}>
+              {big && <span className="tile-label"><b>{t('Мелкое')}</b> {bytes(other)}</span>}
             </div>
           );
         }
@@ -117,8 +118,8 @@ export function Treemap({ items, other, total, onOpen }: {
             onClick={() => item.isDir && onOpen(item.path)}
             onMouseMove={e => show(e, item.name, [
               bytes(item.size), pct(item.size),
-              ...(item.delta ? [`${item.delta > 0 ? '+' : '−'}${bytes(Math.abs(item.delta))} с прошлого снимка`] : []),
-              item.isDir ? 'Нажми, чтобы открыть' : 'Файл',
+              ...(item.delta ? [t('{0} с прошлого снимка', `${item.delta > 0 ? '+' : '−'}${bytes(Math.abs(item.delta))}`)] : []),
+              item.isDir ? t('Нажми, чтобы открыть') : t('Файл'),
             ])}>
             {big && (
               <span className="tile-label">
@@ -136,12 +137,12 @@ export function Treemap({ items, other, total, onOpen }: {
                   onClick={e => { if (child?.isDir) { e.stopPropagation(); onOpen(`${item.path}\\${child.name}`); } }}
                   onMouseMove={e => {
                     e.stopPropagation();
-                    show(e, child ? `${item.name}\\${child.name}` : `${item.name}: мелкое`, [
+                    show(e, child ? `${item.name}\\${child.name}` : t('{0}: мелкое', item.name), [
                       bytes(child ? child.size : item.other),
-                      child ? (child.isDir ? 'Нажми, чтобы открыть' : 'Файл') : 'Файлы и папки меньше 100 МБ',
+                      child ? (child.isDir ? t('Нажми, чтобы открыть') : t('Файл')) : t('Файлы и папки меньше 100 МБ'),
                     ]);
                   }}>
-                  {label && <span className="subtile-label">{child ? child.name : 'мелкое'}</span>}
+                  {label && <span className="subtile-label">{child ? child.name : t('мелкое')}</span>}
                 </div>
               );
             })}

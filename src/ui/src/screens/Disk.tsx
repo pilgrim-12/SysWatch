@@ -2,14 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, type CleanupCategory, type DiskState, type DiskTree, type Growth, type OpProgress } from '../api';
 import { COLOR, ago, bytes, dayTime } from '../format';
 import { Treemap } from '../components/Treemap';
+import { locale, t } from '../i18n';
 
 const GROUPS: { key: CleanupCategory['group']; title: string; note: string }[] = [
-  { key: 'system', title: 'Система', note: 'Безопасно удалять: всё это Windows и программы создадут заново при необходимости.' },
-  { key: 'dev', title: 'Разработка', note: 'Кэши пакетов и старые сборки. Удаление безопасно, но следующая сборка будет дольше: пакеты скачаются заново.' },
-  { key: 'review', title: 'Проверить вручную', note: 'Ничего не отмечено заранее: решать тебе.' },
+  { key: 'system', title: t('Система'), note: t('Безопасно удалять: всё это Windows и программы создадут заново при необходимости.') },
+  { key: 'dev', title: t('Разработка'), note: t('Кэши пакетов и старые сборки. Удаление безопасно, но следующая сборка будет дольше: пакеты скачаются заново.') },
+  { key: 'review', title: t('Проверить вручную'), note: t('Ничего не отмечено заранее: решать тебе.') },
 ];
 
-const MODE: Record<CleanupCategory['mode'], string> = { delete: 'навсегда', recycle: 'в Корзину', none: 'вручную' };
+const MODE: Record<CleanupCategory['mode'], string> = { delete: t('навсегда'), recycle: t('в Корзину'), none: t('вручную') };
 
 function signed(n: number | null | undefined) {
   if (n == null || n === 0) return '';
@@ -34,10 +35,10 @@ function OpPanel({ op, root, onStop }: { op: OpProgress; root: string; onStop: (
   const eta = frac && frac > 0.03 ? (elapsed / frac) * (1 - frac) : null;
   const drive = root.replace('\\', '');
   const title =
-    op.phase === 'clean' ? 'Удаляю выбранное'
-    : op.phase === 'cleanup' ? `Шаг ${op.step} из ${op.steps}: ищу, что можно очистить`
-    : op.phase === 'disk' ? (op.steps > 1 ? `Шаг ${op.step} из ${op.steps}: обхожу диск ${drive}` : `Обхожу диск ${drive}`)
-    : 'Начинаю';
+    op.phase === 'clean' ? t('Удаляю выбранное')
+    : op.phase === 'cleanup' ? t('Шаг {0} из {1}: ищу, что можно очистить', op.step, op.steps)
+    : op.phase === 'disk' ? (op.steps > 1 ? t('Шаг {0} из {1}: обхожу диск {2}', op.step, op.steps, drive) : t('Обхожу диск {0}', drive))
+    : t('Начинаю');
 
   return (
     <div className="panel op-panel" role="status" aria-live="polite">
@@ -45,18 +46,18 @@ function OpPanel({ op, root, onStop }: { op: OpProgress; root: string; onStop: (
         <div>
           <h3>{title}</h3>
           <div className="dim">
-            {op.phase === 'disk' && <>{bytes(op.bytes)} из {bytes(op.target)}, {op.files.toLocaleString('ru-RU')} файлов, {op.dirs.toLocaleString('ru-RU')} папок, </>}
-            прошло {clock(elapsed)}{eta != null && <>, осталось около {clock(eta)}</>}
+            {op.phase === 'disk' && <>{t('{0} из {1}, {2} файлов, {3} папок, ', bytes(op.bytes), bytes(op.target), op.files.toLocaleString(locale()), op.dirs.toLocaleString(locale()))}</>}
+            {t('прошло {0}', clock(elapsed))}{eta != null && <>{t(', осталось около {0}', clock(eta))}</>}
           </div>
         </div>
         <b className="op-pct">{frac != null ? `${Math.floor(frac * 100)}%` : ''}</b>
-        <button className="btn" onClick={onStop}>Остановить</button>
+        <button className="btn" onClick={onStop}>{t('Остановить')}</button>
       </div>
       <div className={`op-bar ${frac == null ? 'indeterminate' : ''}`}>
         <i style={frac != null ? { width: `${frac * 100}%` } : undefined} />
       </div>
       {op.current && <div className="op-current" title={op.current}>{op.current}</div>}
-      <div className="dim op-note">Идёт с низким приоритетом и не мешает работе. Можно закрыть окно — сканирование продолжится.</div>
+      <div className="dim op-note">{t('Идёт с низким приоритетом и не мешает работе. Можно закрыть окно — сканирование продолжится.')}</div>
     </div>
   );
 }
@@ -166,19 +167,19 @@ export function Disk() {
     <>
       <div className="head">
         <div>
-          <h1>Диск</h1>
-          <p>Куда уходит место и что можно безопасно удалить. Раз в сутки SysWatch сам делает снимок диска, когда компьютер не занят.</p>
+          <h1>{t('Диск')}</h1>
+          <p>{t('Куда уходит место и что можно безопасно удалить. Раз в сутки SysWatch сам делает снимок диска, когда компьютер не занят.')}</p>
         </div>
         <div className="head-tools">
           {busy ? (
             <span className="progress-text">
               {state?.busyRoot && state.busyRoot !== state.root
-                ? `Сканирую ${state.busyRoot.replace('\\', '')}: ${opFraction(state.op) != null ? Math.floor(opFraction(state.op)! * 100) + '%' : '…'}`
+                ? t('Сканирую {0}: {1}', state.busyRoot.replace('\\', ''), opFraction(state.op) != null ? Math.floor(opFraction(state.op)! * 100) + '%' : '…')
                 : ''}
             </span>
           ) : (
             <button className="btn primary" onClick={() => run(() => api.diskScan(currentRoot))}>
-              Сканировать {currentRoot.replace('\\', '')}
+              {t('Сканировать {0}', currentRoot.replace('\\', ''))}
             </button>
           )}
         </div>
@@ -187,12 +188,12 @@ export function Disk() {
       {(error || state?.error) && <div className="error">{error ?? state?.error}</div>}
 
       {state && state.drives.length > 0 && (
-        <div className="drives" role="group" aria-label="Диски">
+        <div className="drives" role="group" aria-label={t('Диски')}>
           {state.drives.map(d => {
             const usedPct = d.total ? ((d.total - d.free) / d.total) * 100 : 0;
             return (
               <button key={d.root} className="drive-card" aria-pressed={d.root === state.root} onClick={() => selectDrive(d.root)}>
-                <div className="drive-top"><b>{d.root.replace('\\', '')}</b><span>{d.label}{d.isSystem ? ', системный' : ''}</span></div>
+                <div className="drive-top"><b>{d.root.replace('\\', '')}</b><span>{d.label}{d.isSystem ? t(', системный') : ''}</span></div>
                 <div className="mini-bar"><i className={usedPct > 90 ? 'full' : ''} style={{ width: `${usedPct}%` }} /></div>
                 {state.busyRoot === d.root && (
                   <div className={`mini-progress ${opFraction(state.op) == null ? 'indeterminate' : ''}`}>
@@ -200,10 +201,10 @@ export function Disk() {
                   </div>
                 )}
                 <div className="drive-sub">
-                  свободно {bytes(d.free)} из {bytes(d.total)}
+                  {t('свободно {0} из {1}', bytes(d.free), bytes(d.total))}
                   {state.busyRoot === d.root
-                    ? `, сканирую${opFraction(state.op) != null ? ` ${Math.floor(opFraction(state.op)! * 100)}%` : '…'}`
-                    : d.lastScan ? `, снимок ${ago(d.lastScan)}` : ', снимка нет'}
+                    ? t(', сканирую{0}', opFraction(state.op) != null ? ` ${Math.floor(opFraction(state.op)! * 100)}%` : '…')
+                    : d.lastScan ? t(', снимок {0}', ago(d.lastScan)) : t(', снимка нет')}
                 </div>
               </button>
             );
@@ -217,44 +218,44 @@ export function Disk() {
 
       {drive && (
         <section className="block">
-          <div className="drive-bar" role="img" aria-label={`Занято ${bytes(used)} из ${bytes(drive.total)}`}>
+          <div className="drive-bar" role="img" aria-label={t('Занято {0} из {1}', bytes(used), bytes(drive.total))}>
             {snap ? (
               <>
-                <i style={{ width: `${(snap.scanned / drive.total) * 100}%`, background: COLOR.disk }} title="Файлы и папки" />
-                <i style={{ width: `${(Math.min(snap.hidden, used) / drive.total) * 100}%`, background: '#8a5a52' }} title="Скрыто системой" />
+                <i style={{ width: `${(snap.scanned / drive.total) * 100}%`, background: COLOR.disk }} title={t('Файлы и папки')} />
+                <i style={{ width: `${(Math.min(snap.hidden, used) / drive.total) * 100}%`, background: '#8a5a52' }} title={t('Скрыто системой')} />
               </>
             ) : (
               <i style={{ width: `${(used / drive.total) * 100}%`, background: COLOR.disk }} />
             )}
           </div>
           <div className="facts">
-            <div className="fact"><b>{bytes(drive.free)}</b><span>свободно на {drive.root.replace('\\', '')} из {bytes(drive.total)}</span></div>
+            <div className="fact"><b>{bytes(drive.free)}</b><span>{t('свободно на {0} из {1}', drive.root.replace('\\', ''), bytes(drive.total))}</span></div>
             <div className="fact">
               <b style={{ color: growth && growth.driveDelta > 0 ? 'var(--warn)' : undefined }}>{growth?.since ? signed(growth.driveDelta) || '0' : '—'}</b>
-              <span>{growth?.since ? `занятое место с ${dayTime(growth.since)}` : 'изменение появится после второго снимка'}</span>
+              <span>{growth?.since ? t('занятое место с {0}', dayTime(growth.since)) : t('изменение появится после второго снимка')}</span>
             </div>
-            <div className="fact"><b>{snap?.shadow != null ? bytes(snap.shadow) : '—'}</b><span>точки восстановления Windows</span></div>
-            <div className="fact"><b>{snap ? bytes(snap.hidden) : '—'}</b><span>занято, но не видно в папках</span></div>
+            <div className="fact"><b>{snap?.shadow != null ? bytes(snap.shadow) : '—'}</b><span>{t('точки восстановления Windows')}</span></div>
+            <div className="fact"><b>{snap ? bytes(snap.hidden) : '—'}</b><span>{t('занято, но не видно в папках')}</span></div>
           </div>
         </section>
       )}
 
       {!snap ? (
         <div className="panel empty">
-          Снимка этого диска ещё нет. Нажми «Сканировать»: обход занимает от минуты до нескольких минут и идёт с низким приоритетом, работе не мешает.
+          {t('Снимка этого диска ещё нет. Нажми «Сканировать»: обход занимает от минуты до нескольких минут и идёт с низким приоритетом, работе не мешает.')}
         </div>
       ) : (
         <>
           <section className="block">
             <h2>
-              Что занимает место <small>снимок {ago(snap.ts)}, {snap.files.toLocaleString('ru-RU')} файлов</small>
-              <span className="seg" role="group" aria-label="Вид" style={{ marginLeft: 'auto' }}>
-                <button aria-pressed={view === 'map'} onClick={() => setView('map')}>Карта</button>
-                <button aria-pressed={view === 'list'} onClick={() => setView('list')}>Список</button>
+              {t('Что занимает место')} <small>{t('снимок {0}, {1} файлов', ago(snap.ts), snap.files.toLocaleString(locale()))}</small>
+              <span className="seg" role="group" aria-label={t('Вид')} style={{ marginLeft: 'auto' }}>
+                <button aria-pressed={view === 'map'} onClick={() => setView('map')}>{t('Карта')}</button>
+                <button aria-pressed={view === 'list'} onClick={() => setView('list')}>{t('Список')}</button>
               </span>
             </h2>
             <div className="panel">
-              <nav className="crumbs" aria-label="Путь">
+              <nav className="crumbs" aria-label={t('Путь')}>
                 {crumbs.map((c, i) => (
                   <span key={c.path}>
                     {i > 0 && <span className="sep">\</span>}
@@ -263,7 +264,7 @@ export function Disk() {
                 ))}
                 {tree?.delta ? <span className="delta" style={{ marginLeft: 'auto' }}>{signed(tree.delta)}</span> : null}
               </nav>
-              {!tree ? <div className="empty">Загружаю…</div> : view === 'map' ? (
+              {!tree ? <div className="empty">{t('Загружаю…')}</div> : view === 'map' ? (
                 <Treemap items={tree.items} other={tree.other} total={tree.size} onOpen={setPath} />
               ) : (
                 <div className="tree">
@@ -278,7 +279,7 @@ export function Disk() {
                   ))}
                   {tree.other > 0 && (
                     <div className="tree-row other">
-                      <span className="tree-name">Остальное — мелкие файлы и папки до 100 МБ</span>
+                      <span className="tree-name">{t('Остальное — мелкие файлы и папки до 100 МБ')}</span>
                       <span className="tree-bar"><i style={{ width: `${tree.size ? (tree.other / tree.size) * 100 : 0}%` }} /></span>
                       <span className="tree-size">{bytes(tree.other)}</span>
                       <span />
@@ -290,15 +291,15 @@ export function Disk() {
           </section>
 
           <section className="block">
-            <h2>Что выросло <small>{growth?.since ? `с ${dayTime(growth.since)}` : ''}</small></h2>
+            <h2>{t('Что выросло')} <small>{growth?.since ? t('с {0}', dayTime(growth.since)) : ''}</small></h2>
             <div className="panel">
               {!growth?.since ? (
-                <div className="empty">Сравнивать пока не с чем. Завтра здесь появятся папки, которые выросли за сутки, а через неделю — за неделю.</div>
+                <div className="empty">{t('Сравнивать пока не с чем. Завтра здесь появятся папки, которые выросли за сутки, а через неделю — за неделю.')}</div>
               ) : !growth.items.length ? (
-                <div className="empty">Ни одна папка не выросла больше чем на 300 МБ.</div>
+                <div className="empty">{t('Ни одна папка не выросла больше чем на 300 МБ.')}</div>
               ) : growth.items.map(g => (
-                <div key={g.path} className="grow-row" onClick={() => { setPath(g.path.slice(0, g.path.lastIndexOf('\\')) || null); setView('list'); }} title="Показать в дереве">
-                  <span className="grow-path">{g.path}{g.isNew && <span className="tag new">новая</span>}</span>
+                <div key={g.path} className="grow-row" onClick={() => { setPath(g.path.slice(0, g.path.lastIndexOf('\\')) || null); setView('list'); }} title={t('Показать в дереве')}>
+                  <span className="grow-path">{g.path}{g.isNew && <span className="tag new">{t('новая')}</span>}</span>
                   <span className="delta up">{signed(g.delta)}</span>
                   <span className="dim">{bytes(g.size)}</span>
                 </div>
@@ -311,18 +312,18 @@ export function Disk() {
       {state && !drive?.isSystem ? null : (
       <section className="block">
         <h2>
-          Можно очистить
-          <small>{state?.cleanup ? `проверено ${ago(state.cleanup.scannedAt)}` : 'появится после сканирования'}</small>
+          {t('Можно очистить')}
+          <small>{state?.cleanup ? t('проверено {0}', ago(state.cleanup.scannedAt)) : t('появится после сканирования')}</small>
           {state?.cleanup && !busy && (
-            <button className="link" style={{ marginLeft: 'auto' }} onClick={() => run(api.diskCleanupScan)}>Пересчитать</button>
+            <button className="link" style={{ marginLeft: 'auto' }} onClick={() => run(api.diskCleanupScan)}>{t('Пересчитать')}</button>
           )}
         </h2>
 
         {state?.lastClean && (
           <div className="note ok">
-            Освобождено {bytes(state.lastClean.freed)}
-            {state.lastClean.recycled > 0 && `, в Корзину отправлено файлов: ${state.lastClean.recycled.toLocaleString('ru-RU')}`}
-            {state.lastClean.skipped > 0 && `. Пропущено занятых файлов: ${state.lastClean.skipped.toLocaleString('ru-RU')} — их держат открытые программы`}.
+            {t('Освобождено {0}', bytes(state.lastClean.freed))}
+            {state.lastClean.recycled > 0 && t(', в Корзину отправлено файлов: {0}', state.lastClean.recycled.toLocaleString(locale()))}
+            {state.lastClean.skipped > 0 && t('. Пропущено занятых файлов: {0} — их держат открытые программы', state.lastClean.skipped.toLocaleString(locale()))}.
           </div>
         )}
 
@@ -355,7 +356,7 @@ export function Disk() {
                         <b>{c.size > 0 ? bytes(c.size) : '—'}</b>
                         {c.items.length > 0 && (
                           <button className="link" onClick={() => toggle(open, c.id, setOpen)}>
-                            {isOpen ? 'Скрыть' : c.itemsSelectable ? `Выбрать (${c.items.length})` : 'Где лежит'}
+                            {isOpen ? t('Скрыть') : c.itemsSelectable ? t('Выбрать ({0})', c.items.length) : t('Где лежит')}
                           </button>
                         )}
                       </div>
@@ -385,18 +386,18 @@ export function Disk() {
         {state?.cleanup && (
           <div className="clean-bar">
             <span>
-              Выбрано <b>{bytes(selected.total)}</b>
-              {selected.forever > 0 && <span className="dim">: навсегда {bytes(selected.forever)}</span>}
-              {selected.recycle > 0 && <span className="dim">{selected.forever > 0 ? ',' : ':'} в Корзину {bytes(selected.recycle)}</span>}
+              {t('Выбрано')} <b>{bytes(selected.total)}</b>
+              {selected.forever > 0 && <span className="dim">{t(': навсегда {0}', bytes(selected.forever))}</span>}
+              {selected.recycle > 0 && <span className="dim">{selected.forever > 0 ? ',' : ':'} {t('в Корзину {0}', bytes(selected.recycle))}</span>}
             </span>
             {confirm ? (
               <span className="confirm">
-                <span>Удалить выбранное? Удалённое навсегда вернуть нельзя.</span>
-                <button className="btn danger" onClick={clean}>Да, очистить</button>
-                <button className="btn" onClick={() => setConfirm(false)}>Отмена</button>
+                <span>{t('Удалить выбранное? Удалённое навсегда вернуть нельзя.')}</span>
+                <button className="btn danger" onClick={clean}>{t('Да, очистить')}</button>
+                <button className="btn" onClick={() => setConfirm(false)}>{t('Отмена')}</button>
               </span>
             ) : (
-              <button className="btn primary" disabled={busy || selected.total === 0} onClick={() => setConfirm(true)}>Очистить выбранное</button>
+              <button className="btn primary" disabled={busy || selected.total === 0} onClick={() => setConfirm(true)}>{t('Очистить выбранное')}</button>
             )}
           </div>
         )}

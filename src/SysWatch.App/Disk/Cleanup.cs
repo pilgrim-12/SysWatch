@@ -63,32 +63,32 @@ public static class Cleanup
 
     private static readonly Def[] Defs =
     [
-        new("temp", "system", "Временные файлы", "Папки Temp пользователя и Windows. Файлы моложе суток не трогаем.", "delete", true, 1,
+        new("temp", "system", L.K("Временные файлы"), L.K("Папки Temp пользователя и Windows. Файлы моложе суток не трогаем."), "delete", true, 1,
             () => Existing(Path.GetTempPath().TrimEnd('\\'), Path.Combine(Win, "Temp"))),
-        new("windows_update", "system", "Загрузки обновлений Windows", "Уже установленные обновления, которые Windows скачала заранее.", "delete", true, 0,
+        new("windows_update", "system", L.K("Загрузки обновлений Windows"), L.K("Уже установленные обновления, которые Windows скачала заранее."), "delete", true, 0,
             () => Existing(Path.Combine(Win, @"SoftwareDistribution\Download"),
                 Path.Combine(Win, @"ServiceProfiles\NetworkService\AppData\Local\Microsoft\Windows\DeliveryOptimization\Cache"))),
-        new("browser_cache", "system", "Кэш браузеров", "Chrome, Edge, Firefox. Сайты загрузятся заново. Открытые браузеры держат часть файлов — их пропустим.", "delete", true, 0,
+        new("browser_cache", "system", L.K("Кэш браузеров"), L.K("Chrome, Edge, Firefox. Сайты загрузятся заново. Открытые браузеры держат часть файлов — их пропустим."), "delete", true, 0,
             () => ChromiumCaches(Path.Combine(Local, @"Google\Chrome\User Data"))
                 .Concat(ChromiumCaches(Path.Combine(Local, @"Microsoft\Edge\User Data")))
                 .Concat(ChromiumCaches(Path.Combine(Local, @"BraveSoftware\Brave-Browser\User Data")))
                 .Concat(FirefoxCaches())),
-        new("crash_dumps", "system", "Дампы падений и отчёты об ошибках", "Снимки памяти упавших программ и отчёты для Microsoft.", "delete", true, 0,
+        new("crash_dumps", "system", L.K("Дампы падений и отчёты об ошибках"), L.K("Снимки памяти упавших программ и отчёты для Microsoft."), "delete", true, 0,
             () => Existing(Path.Combine(Local, "CrashDumps"), Path.Combine(Local, @"Microsoft\Windows\WER"),
                 Path.Combine(ProgramData, @"Microsoft\Windows\WER\ReportArchive"), Path.Combine(ProgramData, @"Microsoft\Windows\WER\ReportQueue"),
                 Path.Combine(Win, "Minidump"), Path.Combine(Win, "LiveKernelReports"))),
-        new("thumbnails", "system", "Кэш миниатюр", "Превью картинок в Проводнике. Пересоздастся сам.", "delete", true, 0,
+        new("thumbnails", "system", L.K("Кэш миниатюр"), L.K("Превью картинок в Проводнике. Пересоздастся сам."), "delete", true, 0,
             () => Existing(Path.Combine(Local, @"Microsoft\Windows\Explorer")),
             f => Path.GetFileName(f).StartsWith("thumbcache_", StringComparison.OrdinalIgnoreCase)),
 
-        new("nuget", "dev", "Пакеты NuGet", "Скачанные .NET-пакеты. При следующей сборке скачаются заново.", "delete", false, 0,
+        new("nuget", "dev", L.K("Пакеты NuGet"), L.K("Скачанные .NET-пакеты. При следующей сборке скачаются заново."), "delete", false, 0,
             () => Existing(Path.Combine(Home, @".nuget\packages"), Path.Combine(Local, @"NuGet\v3-cache"), Path.Combine(Local, @"NuGet\http-cache"))),
-        new("npm", "dev", "Кэш npm, pnpm и Yarn", "Скачанные JavaScript-пакеты. При установке скачаются заново.", "delete", false, 0,
+        new("npm", "dev", L.K("Кэш npm, pnpm и Yarn"), L.K("Скачанные JavaScript-пакеты. При установке скачаются заново."), "delete", false, 0,
             () => Existing(Path.Combine(Local, "npm-cache"), Path.Combine(Roaming, "npm-cache"), Path.Combine(Home, "npm-cache"),
                 Path.Combine(Local, @"pnpm\store"), Path.Combine(Local, @"pnpm-cache"), Path.Combine(Local, @"Yarn\Cache"))),
-        new("pip", "dev", "Кэш pip", "Скачанные Python-пакеты.", "delete", false, 0,
+        new("pip", "dev", L.K("Кэш pip"), L.K("Скачанные Python-пакеты."), "delete", false, 0,
             () => Existing(Path.Combine(Local, @"pip\cache"))),
-        new("gradle", "dev", "Кэш Gradle", "Зависимости Android- и Java-проектов. При сборке скачаются заново.", "delete", false, 0,
+        new("gradle", "dev", L.K("Кэш Gradle"), L.K("Зависимости Android- и Java-проектов. При сборке скачаются заново."), "delete", false, 0,
             () => Existing(Path.Combine(Home, @".gradle\caches"), Path.Combine(Home, @".gradle\wrapper\dists"))),
     ];
 
@@ -111,19 +111,19 @@ public static class Cleanup
             list.Add(Category(d.Id, d.Group, d.Title, d.Description, d.Mode, d.DefaultOn, false, d.Hint, items));
         }
 
-        progress("Корзина");
+        progress(L.K("Корзина"));
         var (binSize, binFiles) = RecycleBinSize();
-        list.Add(Category("recycle_bin", "system", "Корзина", "Удалённые файлы, которые ещё можно восстановить. Очистка безвозвратна.", "delete", false, false, null,
-            binFiles > 0 ? new List<CleanupItem> { new("Корзина", binSize, binFiles, 0) } : new List<CleanupItem>()));
+        list.Add(Category("recycle_bin", "system", L.K("Корзина"), L.K("Удалённые файлы, которые ещё можно восстановить. Очистка безвозвратна."), "delete", false, false, null,
+            binFiles > 0 ? new List<CleanupItem> { new(L.K("Корзина"), binSize, binFiles, 0) } : new List<CleanupItem>()));
 
-        progress("Старые сборки в проектах");
-        list.Add(Category("old_builds", "dev", "Старые node_modules, bin, obj, .next",
-            "Папки сборок в проектах, которые не менялись 30+ дней. Уйдут в Корзину; вернуть — npm install или dotnet build.",
+        progress(L.K("Старые сборки в проектах"));
+        list.Add(Category("old_builds", "dev", L.K("Старые node_modules, bin, obj, .next"),
+            L.K("Папки сборок в проектах, которые не менялись 30+ дней. Уйдут в Корзину; вернуть — npm install или dotnet build."),
             "recycle", false, true, null, OldBuilds(ct)));
 
-        progress("Загрузки");
-        list.Add(Category("downloads", "review", "Большие старые файлы в «Загрузках»",
-            "Файлы от 50 МБ, которые не открывали 90+ дней. Ничего не отмечено — выбери сам. Уйдут в Корзину.",
+        progress(L.K("Загрузки"));
+        list.Add(Category("downloads", "review", L.K("Большие старые файлы в «Загрузках»"),
+            L.K("Файлы от 50 МБ, которые не открывали 90+ дней. Ничего не отмечено — выбери сам. Уйдут в Корзину."),
             "recycle", false, true, null, OldDownloads(ct)));
 
         list.Add(Docker());
@@ -260,8 +260,8 @@ public static class Cleanup
             .Select(p => new FileInfo(p))
             .Select(f => new CleanupItem(f.FullName, f.Length, 1, new DateTimeOffset(f.LastWriteTimeUtc).ToUnixTimeSeconds()))
             .ToList();
-        return Category("docker", "review", "Docker", "Образы, контейнеры и тома живут внутри одного файла-диска. Удалять сам файл нельзя.",
-            "none", false, false, "docker system prune -a --volumes   — удалит неиспользуемое; затем в Docker Desktop: Troubleshoot → Clean / Purge data", items);
+        return Category("docker", "review", "Docker", L.K("Образы, контейнеры и тома живут внутри одного файла-диска. Удалять сам файл нельзя."),
+            "none", false, false, L.K("docker system prune -a --volumes   — удалит неиспользуемое; затем в Docker Desktop: Troubleshoot → Clean / Purge data"), items);
     }
 
     private static CleanupCategory WindowsOld(CancellationToken ct)
@@ -273,8 +273,8 @@ public static class Cleanup
             var (size, files, modified) = Measure(path, 0, null, ct);
             items.Add(new CleanupItem(path, size, files, modified));
         }
-        return Category("windows_old", "review", "Предыдущая версия Windows", "Остаётся после крупного обновления, нужна только для отката.",
-            "none", false, false, "Параметры → Система → Память → Временные файлы → «Предыдущие установки Windows»", items);
+        return Category("windows_old", "review", L.K("Предыдущая версия Windows"), L.K("Остаётся после крупного обновления, нужна только для отката."),
+            "none", false, false, L.K("Параметры → Система → Память → Временные файлы → «Предыдущие установки Windows»"), items);
     }
 
     // ── Удаление ─────────────────────────────────────────────────────────
@@ -305,7 +305,7 @@ public static class Cleanup
 
                 if (cat.Mode == "recycle")
                 {
-                    progress($"{cat.Title}: {item.Path}");
+                    progress(item.Path);
                     if (SendToRecycleBin(item.Path)) { recycled += item.Files; }
                     else skipped += item.Files;
                 }

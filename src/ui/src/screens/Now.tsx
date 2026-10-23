@@ -3,6 +3,7 @@ import { api, type AgentParts, type Live } from '../api';
 import { useLoad, useSort } from '../hooks';
 import { COLOR, appLabel, bytes, pct, plural, rate } from '../format';
 import { Plot } from '../components/Plot';
+import { t } from '../i18n';
 
 type Key = 'name' | 'cpu' | 'mem' | 'io';
 
@@ -17,11 +18,11 @@ function Bar({ value, max, color, children }: { value: number; max: number; colo
 }
 
 const PARTS: { key: keyof AgentParts; label: string; color: string }[] = [
-  { key: 'kernel', label: 'события ядра', color: '#4fc3d9' },
+  { key: 'kernel', label: t('события ядра'), color: '#4fc3d9' },
   { key: 'dns', label: 'DNS', color: '#a78bfa' },
-  { key: 'sampler', label: 'опрос процессов', color: '#f2b544' },
-  { key: 'writer', label: 'запись на диск', color: '#f27c6b' },
-  { key: 'other', label: '.NET: JIT, GC, таймеры', color: '#5c718c' },
+  { key: 'sampler', label: t('опрос процессов'), color: '#f2b544' },
+  { key: 'writer', label: t('запись на диск'), color: '#f27c6b' },
+  { key: 'other', label: t('.NET: JIT, GC, таймеры'), color: '#5c718c' },
 ];
 
 /** Из чего складывается расход агента: видно, что оптимизировать. */
@@ -60,7 +61,7 @@ export function Now({ live, onApp }: { live: Live | null; onApp: (name: string) 
   const topCpu = ov ? [...ov.apps].sort((a, b) => b.cpuPct - a.cpuPct).slice(0, 6) : [];
   const topNet = ov ? [...ov.apps].sort((a, b) => b.netRx + b.netTx - a.netRx - a.netTx).filter(a => a.netRx + a.netTx > 0).slice(0, 6) : [];
   const agentSeries = useMemo(
-    () => (ov ? [{ label: 'Агент', color: COLOR.ok, values: ov.agentCpu, fill: true }] : []),
+    () => (ov ? [{ label: t('Агент'), color: COLOR.ok, values: ov.agentCpu, fill: true }] : []),
     [ov],
   );
 
@@ -68,25 +69,25 @@ export function Now({ live, onApp }: { live: Live | null; onApp: (name: string) 
     <>
       <div className="head">
         <div>
-          <h1>Сейчас</h1>
-          <p>Что прямо сейчас нагружает компьютер. Процессы одной программы сложены в одну строку.</p>
+          <h1>{t('Сейчас')}</h1>
+          <p>{t('Что прямо сейчас нагружает компьютер. Процессы одной программы сложены в одну строку.')}</p>
         </div>
         <div className="head-tools">
-          <input className="search" placeholder="Найти программу" value={q} onChange={e => setQ(e.target.value)} />
+          <input className="search" placeholder={t('Найти программу')} value={q} onChange={e => setQ(e.target.value)} />
         </div>
       </div>
 
       <div className="grid-2">
         <section className="block">
           <div className="panel scroll" style={{ maxHeight: 'calc(100vh - 330px)', minHeight: 300 }}>
-            {!live ? <div className="empty">Жду первые данные…</div> : (
+            {!live ? <div className="empty">{t('Жду первые данные…')}</div> : (
               <table className="table">
                 <thead>
                   <tr>
-                    <th {...thProps('name')}>Программа</th>
-                    <th {...thProps('cpu')}>Процессор</th>
-                    <th {...thProps('mem')}>Память</th>
-                    <th {...thProps('io')}>Диск</th>
+                    <th {...thProps('name')}>{t('Программа')}</th>
+                    <th {...thProps('cpu')}>{t('Процессор')}</th>
+                    <th {...thProps('mem')}>{t('Память')}</th>
+                    <th {...thProps('io')}>{t('Диск')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -111,9 +112,9 @@ export function Now({ live, onApp }: { live: Live | null; onApp: (name: string) 
 
         <div>
           <section className="block">
-            <h2>Больше всех грузили процессор <small>за час, в среднем</small></h2>
+            <h2>{t('Больше всех грузили процессор')} <small>{t('за час, в среднем')}</small></h2>
             <div className="panel">
-              {topCpu.length === 0 ? <div className="empty">Агент ещё не накопил историю.</div> : (
+              {topCpu.length === 0 ? <div className="empty">{t('Агент ещё не накопил историю.')}</div> : (
                 <table className="table"><tbody>
                   {topCpu.map(a => (
                     <tr key={a.name} onClick={() => onApp(a.name)}>
@@ -127,9 +128,9 @@ export function Now({ live, onApp }: { live: Live | null; onApp: (name: string) 
           </section>
 
           <section className="block">
-            <h2>Больше всех работали с сетью <small>за час</small></h2>
+            <h2>{t('Больше всех работали с сетью')} <small>{t('за час')}</small></h2>
             <div className="panel">
-              {topNet.length === 0 ? <div className="empty">Сетевой активности не было.</div> : (
+              {topNet.length === 0 ? <div className="empty">{t('Сетевой активности не было.')}</div> : (
                 <table className="table"><tbody>
                   {topNet.map(a => (
                     <tr key={a.name} onClick={() => onApp(a.name)}>
@@ -144,17 +145,17 @@ export function Now({ live, onApp }: { live: Live | null; onApp: (name: string) 
           </section>
 
           <section className="block">
-            <h2>Сколько стоит мониторинг <small>процессор агента за час</small></h2>
+            <h2>{t('Сколько стоит мониторинг')} <small>{t('процессор агента за час')}</small></h2>
             <div className="panel chart-box">
               <h3>
-                {live?.agent.running ? 'Агент работает' : 'Агент не пишет данные'}
+                {live?.agent.running ? t('Агент работает') : t('Агент не пишет данные')}
                 <b style={{ color: COLOR.ok }}>
                   {live?.agent.cpu != null ? pct(live.agent.cpu, 2) : '—'}, {bytes(live?.agent.ram)}
                 </b>
               </h3>
               {ov && ov.minutes.length > 1
                 ? <Plot ts={ov.minutes} series={agentSeries} height={90} yFormat={v => pct(v, 1)} />
-                : <div className="empty">Нет данных</div>}
+                : <div className="empty">{t('Нет данных')}</div>}
               {ov?.agentParts && <CostParts parts={ov.agentParts} />}
             </div>
           </section>

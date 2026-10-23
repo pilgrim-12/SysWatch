@@ -59,8 +59,8 @@ public sealed class Hardware : IDisposable
                 var id = d["DeviceId"]?.ToString() ?? "";
                 counters.TryGetValue(id, out var c);
                 list.Add(new DiskHealth(
-                    d["FriendlyName"]?.ToString()?.Trim() ?? "Диск",
-                    Convert.ToInt32(d["MediaType"] ?? 0) switch { 3 => "HDD", 4 => "SSD", 5 => "SCM", _ => "диск" },
+                    d["FriendlyName"]?.ToString()?.Trim() ?? L.T("Диск"),
+                    Convert.ToInt32(d["MediaType"] ?? 0) switch { 3 => "HDD", 4 => "SSD", 5 => "SCM", _ => L.T("диск") },
                     Convert.ToInt32(d["BusType"] ?? 0) switch { 17 => "NVMe", 11 => "SATA", 7 => "USB", 8 => "RAID", 10 => "SAS", 3 => "ATA", _ => "" },
                     Convert.ToInt64(d["Size"] ?? 0L),
                     Convert.ToInt32(d["HealthStatus"] ?? 0) switch { 0 => "healthy", 1 => "warning", 2 => "unhealthy", _ => "unknown" },
@@ -146,7 +146,7 @@ public sealed class Hardware : IDisposable
                     long ts = e.TimeCreated is { } t ? new DateTimeOffset(t).ToUnixTimeSeconds() : 0;
                     long? sleep = data.TryGetValue("SleepTime", out var st) && DateTime.TryParse(st, out var sd)
                         ? new DateTimeOffset(sd.ToUniversalTime()).ToUnixTimeSeconds() : null;
-                    var source = data.TryGetValue("WakeSourceText", out var w) && !string.IsNullOrWhiteSpace(w) ? w : "неизвестно";
+                    var source = data.TryGetValue("WakeSourceText", out var w) && !string.IsNullOrWhiteSpace(w) ? w : L.T("неизвестно");
                     data.TryGetValue("WakeSourceType", out var type);
                     events.Add(new WakeEvent(ts, sleep, source, WakeType(type)));
                 }
@@ -173,8 +173,8 @@ public sealed class Hardware : IDisposable
 
     private static string? WakeType(string? t) => t switch
     {
-        "0" => "неизвестно", "1" => "кнопка питания", "2" => "крышка или кнопка", "3" => "таймер пробуждения",
-        "4" => "устройство", "5" => "сеть", "6" => "по расписанию", _ => null,
+        "0" => L.T("неизвестно"), "1" => L.T("кнопка питания"), "2" => L.T("крышка или кнопка"), "3" => L.T("таймер пробуждения"),
+        "4" => L.T("устройство"), "5" => L.T("сеть"), "6" => L.T("по расписанию"), _ => null,
     };
 
     private static List<string> Powercfg(string args)
@@ -217,10 +217,10 @@ public sealed class Hardware : IDisposable
                         using (o) { _cpuName ??= o["Name"]?.ToString()?.Trim(); cores += Int(o, "NumberOfCores") ?? 0; threads += Int(o, "NumberOfLogicalProcessors") ?? 0; }
                     _cpuCount = (cores, threads);
                 }
-                catch (Exception) { _cpuName = "Процессор"; _cpuCount = (0, Environment.ProcessorCount); }
+                catch (Exception) { _cpuName = ""; _cpuCount = (0, Environment.ProcessorCount); }
             }
 
-            return new CpuInfo(_cpuName ?? "Процессор", _cpuCount?.Cores ?? 0, _cpuCount?.Threads ?? Environment.ProcessorCount,
+            return new CpuInfo(string.IsNullOrEmpty(_cpuName) ? L.T("Процессор") : _cpuName, _cpuCount?.Cores ?? 0, _cpuCount?.Threads ?? Environment.ProcessorCount,
                 baseMhz, baseMhz * perf / 100, perf, limit, limit is > 0 and < 99.5, Thermal());
         }
     }
@@ -238,7 +238,7 @@ public sealed class Hardware : IDisposable
                 {
                     double k = (Long(o, "HighPrecisionTemperature") ?? 0) / 10.0;
                     if (k <= 0) k = Long(o, "Temperature") ?? 0;
-                    if (k > 200) list.Add(new ThermalZone(o["Name"]?.ToString()?.Replace(@"\_TZ.", "") ?? "зона", Math.Round(k - 273.15, 1)));
+                    if (k > 200) list.Add(new ThermalZone(o["Name"]?.ToString()?.Replace(@"\_TZ.", "") ?? L.T("зона"), Math.Round(k - 273.15, 1)));
                 }
             }
         }

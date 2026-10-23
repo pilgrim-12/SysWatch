@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { api, type ProgramRow } from '../api';
 import { useLoad, useSort } from '../hooks';
 import { ago, bytes, dayTime } from '../format';
+import { t } from '../i18n';
 
 type Filter = 'unused' | 'all' | 'runtime';
 type Key = 'name' | 'lastUsed' | 'installed' | 'size';
@@ -10,15 +11,15 @@ const DAY = 86400;
 const UNUSED_DAYS = 60;
 
 const FILTERS: { key: Filter; label: string }[] = [
-  { key: 'unused', label: `Не запускались ${UNUSED_DAYS}+ дней` },
-  { key: 'all', label: 'Все программы' },
-  { key: 'runtime', label: 'Библиотеки и драйверы' },
+  { key: 'unused', label: t('Не запускались {0}+ дней', UNUSED_DAYS) },
+  { key: 'all', label: t('Все программы') },
+  { key: 'runtime', label: t('Библиотеки и драйверы') },
 ];
 
 const SOURCE: Record<string, string> = {
-  running: 'запущена сейчас',
-  prefetch: 'по данным Windows',
-  history: 'по истории SysWatch',
+  running: t('запущена сейчас'),
+  prefetch: t('по данным Windows'),
+  history: t('по истории SysWatch'),
 };
 
 function isUnused(p: ProgramRow, now: number) {
@@ -59,44 +60,44 @@ export function Programs() {
     <>
       <div className="head">
         <div>
-          <h1>Программы</h1>
-          <p>Что установлено и когда каждая программа последний раз запускалась. Давно не используемые — кандидаты на удаление.</p>
+          <h1>{t('Программы')}</h1>
+          <p>{t('Что установлено и когда каждая программа последний раз запускалась. Давно не используемые — кандидаты на удаление.')}</p>
         </div>
         <div className="head-tools">
-          <input className="search" placeholder="Название или издатель" value={q} onChange={e => setQ(e.target.value)} />
-          <button className="btn" onClick={() => setRefresh(r => r + 1)}>Обновить</button>
+          <input className="search" placeholder={t('Название или издатель')} value={q} onChange={e => setQ(e.target.value)} />
+          <button className="btn" onClick={() => setRefresh(r => r + 1)}>{t('Обновить')}</button>
         </div>
       </div>
 
-      {list.error && <div className="error">Не удалось получить список программ: {list.error}</div>}
+      {list.error && <div className="error">{t('Не удалось получить список программ: {0}', list.error)}</div>}
       {list.data && !list.data.prefetchAvailable && (
-        <div className="note">Prefetch в Windows выключен, поэтому последний запуск известен только за дни работы SysWatch. Через неделю картина станет точнее.</div>
+        <div className="note">{t('Prefetch в Windows выключен, поэтому последний запуск известен только за дни работы SysWatch. Через неделю картина станет точнее.')}</div>
       )}
 
       {list.data && (
         <div className="facts">
-          <div className="fact"><b>{items.filter(p => p.kind !== 'runtime').length}</b><span>программ установлено</span></div>
-          <div className="fact"><b style={{ color: unused.length ? 'var(--cpu)' : undefined }}>{unused.length}</b><span>не запускались {UNUSED_DAYS}+ дней</span></div>
-          <div className="fact"><b>{bytes(unusedSize)}</b><span>занимают неиспользуемые</span></div>
-          <div className="fact"><b>{ago(list.data.scannedAt)}</b><span>список обновлён</span></div>
+          <div className="fact"><b>{items.filter(p => p.kind !== 'runtime').length}</b><span>{t('программ установлено')}</span></div>
+          <div className="fact"><b style={{ color: unused.length ? 'var(--cpu)' : undefined }}>{unused.length}</b><span>{t('не запускались {0}+ дней', UNUSED_DAYS)}</span></div>
+          <div className="fact"><b>{bytes(unusedSize)}</b><span>{t('занимают неиспользуемые')}</span></div>
+          <div className="fact"><b>{ago(list.data.scannedAt)}</b><span>{t('список обновлён')}</span></div>
         </div>
       )}
 
       <div className="filters" style={{ marginBottom: 12 }}>
-        <div className="seg" role="group" aria-label="Фильтр">
+        <div className="seg" role="group" aria-label={t('Фильтр')}>
           {FILTERS.map(f => <button key={f.key} aria-pressed={filter === f.key} onClick={() => setFilter(f.key)}>{f.label}</button>)}
         </div>
       </div>
 
       <div className="panel scroll" style={{ maxHeight: 'calc(100vh - 400px)', minHeight: 300 }}>
-        {!rows.length ? <div className="empty">{list.loading ? 'Собираю список программ…' : 'Под этот фильтр ничего нет.'}</div> : (
+        {!rows.length ? <div className="empty">{list.loading ? t('Собираю список программ…') : t('Под этот фильтр ничего нет.')}</div> : (
           <table className="table">
             <thead>
               <tr>
-                <th {...thProps('name')}>Программа</th>
-                <th {...thProps('lastUsed')} style={{ textAlign: 'left' }}>Последний запуск</th>
-                <th {...thProps('installed')}>Установлена</th>
-                <th {...thProps('size')}>Размер</th>
+                <th {...thProps('name')}>{t('Программа')}</th>
+                <th {...thProps('lastUsed')} style={{ textAlign: 'left' }}>{t('Последний запуск')}</th>
+                <th {...thProps('installed')}>{t('Установлена')}</th>
+                <th {...thProps('size')}>{t('Размер')}</th>
                 <th />
               </tr>
             </thead>
@@ -110,25 +111,25 @@ export function Programs() {
                   <td style={{ textAlign: 'left' }}>
                     {p.lastUsed ? (
                       <>
-                        <span style={{ color: isUnused(p, now) ? 'var(--cpu)' : undefined }}>{p.lastUsedBy === 'running' ? 'сейчас' : ago(p.lastUsed)}</span>
+                        <span style={{ color: isUnused(p, now) ? 'var(--cpu)' : undefined }}>{p.lastUsedBy === 'running' ? t('сейчас') : ago(p.lastUsed)}</span>
                         <div className="dim" style={{ fontSize: 12 }}>{SOURCE[p.lastUsedBy ?? ''] ?? ''}</div>
                       </>
                     ) : (
-                      <span className="dim">{p.kind === 'app' ? 'запуск не замечен' : 'не запускается сама'}</span>
+                      <span className="dim">{p.kind === 'app' ? t('запуск не замечен') : t('не запускается сама')}</span>
                     )}
                   </td>
                   <td className="dim">{p.installed ? dayTime(p.installed).split(',')[0] : '—'}</td>
                   <td>{p.size ? bytes(p.size) : '—'}</td>
                   <td style={{ width: 230 }}>
                     {started.has(p.id) ? (
-                      <span className="dim">открылся деинсталлятор</span>
+                      <span className="dim">{t('открылся деинсталлятор')}</span>
                     ) : confirm === p.id ? (
                       <span className="confirm">
-                        <button className="btn danger" onClick={() => uninstall(p)}>Удалить</button>
-                        <button className="btn" onClick={() => setConfirm(null)}>Отмена</button>
+                        <button className="btn danger" onClick={() => uninstall(p)}>{t('Удалить')}</button>
+                        <button className="btn" onClick={() => setConfirm(null)}>{t('Отмена')}</button>
                       </span>
                     ) : p.canUninstall && p.kind !== 'runtime' ? (
-                      <button className="link" onClick={() => setConfirm(p.id)}>Удалить…</button>
+                      <button className="link" onClick={() => setConfirm(p.id)}>{t('Удалить…')}</button>
                     ) : null}
                   </td>
                 </tr>
@@ -138,7 +139,7 @@ export function Programs() {
         )}
       </div>
       <p className="dim" style={{ marginTop: 10, fontSize: 13, color: 'var(--muted)' }}>
-        «Удалить» запускает штатный деинсталлятор программы — дальше всё подтверждается в его окне, как при удалении через «Параметры».
+        {t('«Удалить» запускает штатный деинсталлятор программы — дальше всё подтверждается в его окне, как при удалении через «Параметры».')}
       </p>
     </>
   );

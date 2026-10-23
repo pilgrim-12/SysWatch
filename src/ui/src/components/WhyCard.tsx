@@ -1,10 +1,11 @@
 import type { Why } from '../api';
 import { appLabel, bytes, dayTime, pct, time } from '../format';
+import { t } from '../i18n';
 
 const KIND: Record<Why['kinds'][number], { label: string; cls: string }> = {
-  cpu: { label: 'процессор', cls: 'cpu' },
-  mem: { label: 'память', cls: 'mem' },
-  io: { label: 'диск', cls: 'disk' },
+  cpu: { label: t('процессор'), cls: 'cpu' },
+  mem: { label: t('память'), cls: 'mem' },
+  io: { label: t('диск'), cls: 'disk' },
 };
 
 /** Разбор одного отрезка: вердикт, подробности, виновники (кликабельны) и что запустилось рядом. */
@@ -15,9 +16,9 @@ export function WhyCard({ why, onApp, compact = false }: { why: Why; onApp: (nam
       <header>
         <h3>{dayTime(why.from)} — {time(why.to)}</h3>
         <div className="why-tags">
-          {why.kinds.length === 0 && <span className="tag">без перегрузки</span>}
+          {why.kinds.length === 0 && <span className="tag">{t('без перегрузки')}</span>}
           {why.kinds.map(k => <span key={k} className={`tag why-k ${KIND[k].cls}`}>{KIND[k].label}</span>)}
-          {why.hasData && <span className="dim">процессор до {pct(why.peakCpu, 0)}, память до {pct(why.peakMem, 0)}</span>}
+          {why.hasData && <span className="dim">{t('процессор до {0}, память до {1}', pct(why.peakCpu, 0), pct(why.peakMem, 0))}</span>}
         </div>
       </header>
       <p className="why-verdict">{why.verdict}</p>
@@ -34,7 +35,7 @@ export function WhyCard({ why, onApp, compact = false }: { why: Why; onApp: (nam
       )}
       {!compact && why.started.length > 0 && (
         <p className="why-started dim">
-          Запустилось рядом: {why.started.slice(0, 8).map(s => appLabel(s.app) + (s.hint ? ` (${s.hint})` : '')).join(', ')}
+          {t('Запустилось рядом: {0}', why.started.slice(0, 8).map(s => appLabel(s.app) + (s.hint ? ` (${s.hint})` : '')).join(', '))}
         </p>
       )}
     </article>

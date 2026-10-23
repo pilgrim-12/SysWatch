@@ -31,6 +31,7 @@ public sealed class Api(Queries queries, LiveSampler live, AnomalyStore anomalie
     {
         var q = HttpUtility.ParseQueryString(uri.Query);
         int range = int.TryParse(q["range"], out var r) ? r : 60;
+        L.UseForRequest(q["lang"]);
 
         try
         {
@@ -78,6 +79,16 @@ public sealed class Api(Queries queries, LiveSampler live, AnomalyStore anomalie
                     return (200, Serialize(res));
                 }
 
+                case "/api/history/apply-now" when method == "POST":
+                {
+                    var b = q["browser"] ?? "";
+                    var applied = await Task.Run(() => history.ApplyNow(b));
+                    return (200, Serialize(applied is null
+                        ? new ActionResult(false, L.T("Не удалось закрыть {0}. Закройте его сами — удаление выполнится автоматически.", b))
+                        : new ActionResult(true, L.T("Готово: удалено записей — {0}.", applied.Deleted))));
+                }
+                case "/api/history/pending" when method == "GET":
+                    return (200, Serialize(history.PendingBrowsers()));
                 case "/api/history/delete" when method == "POST":
                 {
                     var req = JsonSerializer.Deserialize<DeleteRequest>(body ?? "{}", Json) ?? new DeleteRequest(null, null, null, false);
@@ -103,10 +114,15 @@ public sealed class Api(Queries queries, LiveSampler live, AnomalyStore anomalie
                     // Папку открываем, файл (git.exe, диск WSL) — показываем выделенным в его папке.
                     var dir = q["path"] ?? "";
                     string? args = Directory.Exists(dir) ? $"\"{dir}\"" : File.Exists(dir) ? $"/select,\"{dir}\"" : null;
-                    if (args is null) return (200, Serialize(new ActionResult(false, "Папка не найдена.")));
+                    if (args is null) return (200, Serialize(new ActionResult(false, L.T("Папка не найдена."))));
                     System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", args) { UseShellExecute = false });
-                    return (200, Serialize(new ActionResult(true, "Открыто.")));
+                    return (200, Serialize(new ActionResult(true, L.T("Открыто."))));
                 }
+
+                case "/api/settings/lang" when method == "POST":
+                    L.SetDefault(q["value"]);
+                    anomalies.Set("ui_lang", L.Default);
+                    return (200, "true");
 
                 case "/api/report/open" when method == "POST":
                     return (200, Serialize(OpenFile(q["path"] ?? "")));
@@ -168,7 +184,7 @@ public sealed class Api(Queries queries, LiveSampler live, AnomalyStore anomalie
                     "/api/gpu" => gpu.Get(range),
                     "/api/report" => BuildReport(q["days"]),
                     "/api/report/export" when method == "POST" => Export(q["days"]),
-                    "/api/why" => insights.Explain(L(q["from"]), L(q["to"])),
+                    "/api/why" => insights.Explain(ToLong(q["from"]), ToLong(q["to"])),
                     "/api/slowdowns" => insights.SlowDowns(DateTimeOffset.UtcNow.ToUnixTimeSeconds() - range * 60L, DateTimeOffset.UtcNow.ToUnixTimeSeconds()),
                     _ => null,
                 };
@@ -185,7 +201,7 @@ public sealed class Api(Queries queries, LiveSampler live, AnomalyStore anomalie
         }
     }
 
-    private static long L(string? s) => long.TryParse(s, out var v) ? v : 0;
+    private static long ToLong(string? s) => long.TryParse(s, out var v) ? v : 0;
 
     private Report BuildReport(string? days)
     {
@@ -208,9 +224,9 @@ public sealed class Api(Queries queries, LiveSampler live, AnomalyStore anomalie
     {
         var docs = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "SysWatch");
         if (!File.Exists(path) || !Path.GetFullPath(path).StartsWith(docs, StringComparison.OrdinalIgnoreCase))
-            return new(false, "Файл отчёта не найден.");
+            return new(false, L.T("Файл отчёта не найден."));
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{path}\"") { UseShellExecute = false });
-        return new(true, "Открыто.");
+        return new(true, L.T("Открыто."));
     }
 
     private sealed record ExportResult(bool Ok, string Path);

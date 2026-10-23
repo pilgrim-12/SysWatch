@@ -642,7 +642,8 @@ export function mockApi(req: IncomingMessage, res: ServerResponse, next: () => v
       case '/api/system/crashes': return crashMock(Number(u.searchParams.get('days') ?? 30));
       case '/api/dev/docker': return { ok: true, message: 'Готово.' };
       case '/api/dev/node-modules': return { ok: true, message: 'node_modules удалена.' };
-      case '/api/history/delete': return { ok: false, message: 'Сначала нужно закрыть: Edge.', deleted: 0, running: ['Edge'] };
+      case '/api/history/delete': return { ok: true, message: 'Edge сейчас открыт — удалю автоматически, как только вы его закроете. Из этого списка записи уже скрыты.', deleted: 0, running: ['Edge'], pending: ['Edge'] };
+      case '/api/history/pending': return ['Edge'];
       case '/api/history': return historyMock(Number(u.searchParams.get('days') ?? 7), u.searchParams.get('q') ?? '', u.searchParams.get('source') ?? '', u.searchParams.get('kind') ?? '');
       case '/api/report': return reportMock(Number(u.searchParams.get('days') ?? 7));
       case '/api/report/export': return { ok: true, path: 'C:\\Users\\ANTRARES\\Documents\\SysWatch\\Отчёт SysWatch 2026-10-16 — 2026-10-23 10-40.html' };

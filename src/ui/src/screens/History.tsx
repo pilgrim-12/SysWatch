@@ -2,26 +2,27 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, type HistoryItem } from '../api';
 import { useLoad } from '../hooks';
 import { pluralWord } from '../format';
+import { locale, t } from '../i18n';
 
 type Kind = 'search' | 'visit' | 'domains' | 'profiles';
 
 const KINDS: { key: Kind; label: string }[] = [
-  { key: 'search', label: 'Поисковые запросы' },
-  { key: 'visit', label: 'Посещения' },
-  { key: 'domains', label: 'Сайты' },
-  { key: 'profiles', label: 'Браузеры и профили' },
+  { key: 'search', label: t('Поисковые запросы') },
+  { key: 'visit', label: t('Посещения') },
+  { key: 'domains', label: t('Сайты') },
+  { key: 'profiles', label: t('Браузеры и профили') },
 ];
 
 const PERIODS = [
-  { days: 1, label: 'Сутки' },
-  { days: 7, label: '7 дней' },
-  { days: 30, label: '30 дней' },
-  { days: 90, label: '90 дней' },
+  { days: 1, label: t('Сутки') },
+  { days: 7, label: t('7 дней') },
+  { days: 30, label: t('30 дней') },
+  { days: 90, label: t('90 дней') },
 ];
 
-const dayFmt = new Intl.DateTimeFormat('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
-const timeFmt = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' });
-const shortFmt = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+const dayFmt = new Intl.DateTimeFormat(locale(), { weekday: 'long', day: 'numeric', month: 'long' });
+const timeFmt = new Intl.DateTimeFormat(locale(), { hour: '2-digit', minute: '2-digit' });
+const shortFmt = new Intl.DateTimeFormat(locale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
 function dayKey(ts: number) {
   const d = new Date(ts * 1000);
@@ -30,8 +31,8 @@ function dayKey(ts: number) {
 
 function dayTitle(key: number) {
   const today = dayKey(Date.now() / 1000);
-  if (key === today) return 'Сегодня';
-  if (key === today - 86400000) return 'Вчера';
+  if (key === today) return t('Сегодня');
+  if (key === today - 86400000) return t('Вчера');
   return dayFmt.format(key);
 }
 
@@ -70,29 +71,35 @@ export function History() {
   const clearProfile = (id: string, all: boolean) => {
     const period = PERIODS.find(p => p.days === days)!.label.toLowerCase();
     remove({ clearProfiles: [id], clearFrom: all ? undefined : Math.floor(Date.now() / 1000) - days * 86400 },
-      all ? `ВСЮ историю профиля «${id}» за всё время` : `историю профиля «${id}» за последние ${period}`);
+      all ? t('ВСЮ историю профиля «{0}» за всё время', id) : t('историю профиля «{0}» за последние {1}', id, period));
   };
 
   /** Удаление: если браузер открыт — спрашиваем, можно ли его закрыть, и повторяем. */
+  // Открытый браузер не закрываем: удаление ставится в очередь и выполняется, когда вы сами его закроете.
+  const [pending, setPending] = useState<string[]>([]);
+  useEffect(() => { api.historyPending().then(setPending).catch(() => {}); }, [r]);
+
   const remove = async (req: { items?: { source: string; url: string }[]; domain?: string; sources?: string[]; clearProfiles?: string[]; clearFrom?: number }, what: string) => {
-    if (!confirm(`Удалить из истории ${what}? Перед удалением SysWatch сохранит копию истории рядом с ней.`)) return;
+    if (!confirm(t('Удалить из истории {0}? Перед удалением SysWatch сохранит копию истории рядом с ней.', what))) return;
     setBusy(true); setMsg(null);
     try {
-      let res = await api.historyDelete({ ...req, closeBrowsers: false });
-      if (!res.ok && res.running.length > 0) {
-        if (!confirm(`${res.running.join(', ')} сейчас ${res.running.length > 1 ? 'открыты' : 'открыт'}: пока браузер работает, он держит историю и вернёт удалённое. Закрыть ${res.running.length > 1 ? 'их' : 'его'}? Вкладки восстановятся при следующем запуске.`)) {
-          setMsg({ ok: false, text: res.message });
-          return;
-        }
-        res = await api.historyDelete({ ...req, closeBrowsers: true });
-      }
-      setMsg({ ok: res.ok, text: res.message });
-      if (res.ok) { setSelected(new Map()); data.reload(); }
+      const res = await api.historyDelete({ ...req, closeBrowsers: false });
+      // Если всё ушло в очередь — хватит плашки «Ждёт закрытия браузера», второе сообщение не нужно.
+      setMsg(res.pending.length > 0 && res.deleted === 0 && res.ok ? null : { ok: res.ok, text: res.message });
+      setSelected(new Map());
+      data.reload();
     } catch (e) {
       setMsg({ ok: false, text: String((e as Error)?.message ?? e) });
     } finally {
       setBusy(false);
     }
+  };
+
+  const applyNow = async (browser: string) => {
+    if (!confirm(t('Закрыть {0} сейчас и сразу удалить? Вкладки браузер восстановит при следующем запуске (если это включено в его настройках).', browser))) return;
+    setBusy(true);
+    try { const r2 = await api.historyApplyNow(browser); setMsg({ ok: r2.ok, text: r2.message }); data.reload(); }
+    finally { setBusy(false); }
   };
 
   const groups = useMemo(() => {
@@ -112,55 +119,61 @@ export function History() {
     <>
       <div className="head">
         <div>
-          <h1>История браузеров</h1>
-          <p>Что вы искали и какие сайты открывали — во всех браузерах и профилях этой учётной записи Windows. SysWatch читает копию истории и ничего не сохраняет и не отправляет.</p>
+          <h1>{t('История браузеров')}</h1>
+          <p>{t('Что вы искали и какие сайты открывали — во всех браузерах и профилях этой учётной записи Windows. SysWatch читает копию истории и ничего не сохраняет и не отправляет.')}</p>
         </div>
         <div className="head-tools">
-          <div className="seg" role="group" aria-label="Период">
+          <div className="seg" role="group" aria-label={t('Период')}>
             {PERIODS.map(p => <button key={p.days} aria-pressed={days === p.days} onClick={() => setDays(p.days)}>{p.label}</button>)}
           </div>
         </div>
       </div>
 
-      {data.error && <div className="error">Не удалось прочитать историю: {data.error}</div>}
+      {data.error && <div className="error">{t('Не удалось прочитать историю: {0}', data.error)}</div>}
 
       {r && (
         <div className="facts">
           <div className="fact"><b style={{ color: 'var(--cpu)' }}>{r.searches}</b><span>{pluralWord(r.searches, 'поисковый запрос', 'поисковых запроса', 'поисковых запросов')}</span></div>
-          <div className="fact"><b style={{ color: 'var(--net)' }}>{r.visits}</b><span>{pluralWord(r.visits, 'посещение', 'посещения', 'посещений')} страниц</span></div>
-          <div className="fact"><b>{r.domains.length >= 100 ? '100+' : r.domains.length}</b><span>разных сайтов</span></div>
-          <div className="fact"><b>{r.profiles.filter(p => p.ok).length}</b><span>браузеров и профилей прочитано</span></div>
+          <div className="fact"><b style={{ color: 'var(--net)' }}>{r.visits}</b><span>{pluralWord(r.visits, 'посещение страницы', 'посещения страниц', 'посещений страниц')}</span></div>
+          <div className="fact"><b>{r.domains.length >= 100 ? '100+' : r.domains.length}</b><span>{t('разных сайтов')}</span></div>
+          <div className="fact"><b>{r.profiles.filter(p => p.ok).length}</b><span>{t('браузеров и профилей прочитано')}</span></div>
         </div>
       )}
 
       {failed.map(p => <div key={p.id} className="note">{p.id}: {p.error}</div>)}
       {msg && <div className={msg.ok ? 'note' : 'error'}>{msg.text}</div>}
+      {pending.length > 0 && (
+        <div className="note pending-note">
+          <span>{t('Ждёт закрытия браузера:')} <b>{pending.join(', ')}</b>. {pending.length > 1 ? t('Удаление выполнится само, как только вы закроете их — SysWatch покажет уведомление.') : t('Удаление выполнится само, как только вы закроете его — SysWatch покажет уведомление.')}</span>
+          {pending.map(b => <button key={b} className="link" disabled={busy} onClick={() => applyNow(b)}>{t('Закрыть {0} и удалить сейчас', b)}</button>)}
+        </div>
+      )}
 
       <div className="filters" style={{ margin: '18px 0 14px' }}>
         <div className="seg" role="tablist">
           {KINDS.map(k => <button key={k.key} role="tab" aria-pressed={kind === k.key} onClick={() => setKind(k.key)}>{k.label}</button>)}
         </div>
-        <input className="search" placeholder="Слово, сайт или адрес" value={q} onChange={e => setQ(e.target.value)} />
+        <input className="search" placeholder={t('Слово, сайт или адрес')} value={q} onChange={e => setQ(e.target.value)} />
         {r && r.profiles.length > 1 && (
-          <select className="select" value={source} onChange={e => setSource(e.target.value)} aria-label="Браузер">
-            <option value="">Все браузеры</option>
+          <select className="select" value={source} onChange={e => setSource(e.target.value)} aria-label={t('Браузер')}>
+            <option value="">{t('Все браузеры')}</option>
             {r.profiles.filter(p => p.ok).map(p => <option key={p.id} value={p.id}>{p.id}</option>)}
           </select>
         )}
-        {data.loading && <span className="dim" style={{ fontSize: 13 }}>Читаю историю…</span>}
+        {data.loading && <span className="dim" style={{ fontSize: 13 }}>{t('Читаю историю…')}</span>}
         {kind !== 'domains' && selected.size > 0 && (
           <div className="sel-bar">
-            <span>Выбрано: {selected.size}</span>
-            <button className="btn danger" disabled={busy} onClick={() => remove({ items: [...selected.values()] }, `выбранные записи (${selected.size})`)}>{busy ? 'Удаляю…' : 'Удалить из истории'}</button>
-            <button className="link dim" onClick={() => setSelected(new Map())}>Снять выбор</button>
+            <span>{t('Выбрано: {0}', selected.size)}</span>
+            <button className="btn danger" disabled={busy} onClick={() => remove({ items: [...selected.values()] }, t('выбранные записи ({0})', selected.size))}>{busy ? t('Удаляю…') : t('Удалить из истории')}</button>
+            <button className="link dim" onClick={() => setSelected(new Map())}>{t('Снять выбор')}</button>
           </div>
         )}
       </div>
 
-      {!r ? <div className="empty">{data.error ? '' : 'Читаю историю браузеров…'}</div> : kind === 'profiles' ? (
+      {!r ? <div className="empty">{data.error ? '' : t('Читаю историю браузеров…')}</div> : kind === 'profiles' ? (
         <div className="panel">
           <table className="table dev-table">
-            <thead><tr><th style={{ textAlign: 'left' }}>Браузер и профиль</th><th>Посещений</th><th>Запросов</th><th /></tr></thead>
+            <thead><tr><th style={{ textAlign: 'left' }}>{t('Браузер и профиль')}</th><th>{t('Посещений')}</th><th>{t('Запросов')}</th><th /></tr></thead>
             <tbody>
               {r.profiles.map(p => (
                 <tr key={p.id}>
@@ -168,8 +181,8 @@ export function History() {
                   <td>{p.visits}</td>
                   <td>{p.searches}</td>
                   <td className="dev-act">
-                    <button className="link" disabled={busy || !p.ok} onClick={() => clearProfile(p.id, false)}>Очистить за {PERIODS.find(x => x.days === days)!.label.toLowerCase()}</button>
-                    <button className="link danger-link" disabled={busy || !p.ok} onClick={() => clearProfile(p.id, true)}>Очистить всё</button>
+                    <button className="link" disabled={busy || !p.ok} onClick={() => clearProfile(p.id, false)}>{t('Очистить за {0}', PERIODS.find(x => x.days === days)!.label.toLowerCase())}</button>
+                    <button className="link danger-link" disabled={busy || !p.ok} onClick={() => clearProfile(p.id, true)}>{t('Очистить всё')}</button>
                   </td>
                 </tr>
               ))}
@@ -179,9 +192,9 @@ export function History() {
       ) : kind === 'domains' ? (
         <div className="panel">
           <table className="table dev-table">
-            <thead><tr><th style={{ textAlign: 'left' }}>Сайт</th><th style={{ textAlign: 'left', width: '40%' }}>Посещений</th><th>Последний раз</th><th /></tr></thead>
+            <thead><tr><th style={{ textAlign: 'left' }}>{t('Сайт')}</th><th style={{ textAlign: 'left', width: '40%' }}>{t('Посещений')}</th><th>{t('Последний раз')}</th><th /></tr></thead>
             <tbody>
-              {r.domains.length === 0 && <tr><td colSpan={4} className="dim">Ничего не найдено</td></tr>}
+              {r.domains.length === 0 && <tr><td colSpan={4} className="dim">{t('Ничего не найдено')}</td></tr>}
               {r.domains.map(d => (
                 <tr key={d.domain} onClick={() => { setQ(d.domain); setKind('visit'); }}>
                   <td className="dev-name"><b>{d.domain}</b>{r.profiles.length > 1 && <div className="dim">{d.sources.join(', ')}</div>}</td>
@@ -192,8 +205,8 @@ export function History() {
                   <td className="dev-act">
                     <button className="link" disabled={busy} onClick={e => {
                       e.stopPropagation();
-                      remove({ domain: d.domain, sources: source ? [source] : undefined }, `все страницы ${d.domain}${source ? ` в ${source}` : ' во всех браузерах'} — за всё время, а не только за выбранный период`);
-                    }}>Удалить сайт</button>
+                      remove({ domain: d.domain, sources: source ? [source] : undefined }, source ? t('все страницы {0} в {1} — за всё время, а не только за выбранный период', d.domain, source) : t('все страницы {0} во всех браузерах — за всё время, а не только за выбранный период', d.domain));
+                    }}>{t('Удалить сайт')}</button>
                   </td>
                 </tr>
               ))}
@@ -201,7 +214,7 @@ export function History() {
           </table>
         </div>
       ) : groups.length === 0 ? (
-        <div className="panel"><div className="empty">{q ? 'Ничего не найдено.' : kind === 'search' ? 'Поисковых запросов за период нет.' : 'Посещений за период нет.'}</div></div>
+        <div className="panel"><div className="empty">{q ? t('Ничего не найдено.') : kind === 'search' ? t('Поисковых запросов за период нет.') : t('Посещений за период нет.')}</div></div>
       ) : groups.map(([key, items]) => (
         <section key={key} className="block">
           <h2>
@@ -214,7 +227,7 @@ export function History() {
           <div className="panel">
             {items.map((i, n) => (
               <div key={n} className={`hist-line ${selected.has(selKey(i)) ? 'sel' : ''}`}>
-              <input type="checkbox" className="hist-check" checked={selected.has(selKey(i))} onChange={() => toggle(i)} aria-label="Выбрать" />
+              <input type="checkbox" className="hist-check" checked={selected.has(selKey(i))} onChange={() => toggle(i)} aria-label={t('Выбрать')} />
               <a className="hist-row" href={i.url} target="_blank" rel="noreferrer" title={i.url}>
                 <span className="hist-time">{timeFmt.format(i.ts * 1000)}</span>
                 {i.kind === 'search' ? (
@@ -230,9 +243,9 @@ export function History() {
         </section>
       ))}
 
-      {r && r.items.length >= 1500 && <p className="hint-line">Показаны последние 1500 записей. Уточните поиск или период.</p>}
-      <p className="hint-line">Режим инкогнито браузеры не записывают — его здесь нет. Ссылки открываются в браузере по умолчанию.
-        Удаление действует на этот компьютер: если в браузере включена синхронизация, история в аккаунте Google, Microsoft или Firefox остаётся — её чистят в настройках аккаунта.</p>
+      {r && r.items.length >= 1500 && <p className="hint-line">{t('Показаны последние 1500 записей. Уточните поиск или период.')}</p>}
+      <p className="hint-line">{t('Режим инкогнито браузеры не записывают — его здесь нет. Ссылки открываются в браузере по умолчанию.')}{' '}
+        {t('Удаление действует на этот компьютер: если в браузере включена синхронизация, история в аккаунте Google, Microsoft или Firefox остаётся — её чистят в настройках аккаунта.')}</p>
     </>
   );
 }

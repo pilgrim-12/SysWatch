@@ -22,23 +22,23 @@ public sealed class Firewall(AnomalyStore state)
 
     public ActionResult Block(string path)
     {
-        if (!File.Exists(path)) return new(false, "Файл программы не найден.");
+        if (!File.Exists(path)) return new(false, L.T("Файл программы не найден."));
         if (path.StartsWith(Environment.GetFolderPath(Environment.SpecialFolder.Windows), StringComparison.OrdinalIgnoreCase))
-            return new(false, "Это системный файл Windows — блокировка может сломать сеть или обновления.");
+            return new(false, L.T("Это системный файл Windows — блокировка может сломать сеть или обновления."));
 
         lock (_gate)
         {
             Netsh($"advfirewall firewall delete rule name=\"{RuleName(path)}\"");
             int a = Netsh($"advfirewall firewall add rule name=\"{RuleName(path)}\" dir=out action=block program=\"{path}\" enable=yes");
             int b = Netsh($"advfirewall firewall add rule name=\"{RuleName(path)}\" dir=in action=block program=\"{path}\" enable=yes");
-            if (a != 0 || b != 0) return new(false, "Брандмауэр Windows не принял правило. Он включён?");
+            if (a != 0 || b != 0) return new(false, L.T("Брандмауэр Windows не принял правило. Он включён?"));
 
             var list = Load();
             list.RemoveAll(x => x.Path.Equals(path, StringComparison.OrdinalIgnoreCase));
             list.Add(new BlockedApp(path, DateTimeOffset.UtcNow.ToUnixTimeSeconds()));
             Save(list);
         }
-        return new(true, "Выход в сеть запрещён. Уже открытые соединения закроются, новые не откроются.");
+        return new(true, L.T("Выход в сеть запрещён. Уже открытые соединения закроются, новые не откроются."));
     }
 
     public ActionResult Unblock(string path)
@@ -50,7 +50,7 @@ public sealed class Firewall(AnomalyStore state)
             list.RemoveAll(x => x.Path.Equals(path, StringComparison.OrdinalIgnoreCase));
             Save(list);
         }
-        return new(true, "Сеть снова разрешена.");
+        return new(true, L.T("Сеть снова разрешена."));
     }
 
     /// <summary>Заблокированные программы; правила, удалённые вручную в Брандмауэре, из списка убираем.</summary>

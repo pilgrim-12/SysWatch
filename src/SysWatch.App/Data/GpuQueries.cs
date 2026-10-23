@@ -75,7 +75,7 @@ public sealed class GpuQueries(DayFiles files)
             var list = g.ToList();
             var last = list[^1];
             var temps = list.Where(r => r.Temp is not null).ToList();
-            adapters.Add(new GpuAdapterView(g.Key, list.LastOrDefault(r => r.Name is not null).Name ?? "Видеоадаптер", last.MemTotal,
+            adapters.Add(new GpuAdapterView(g.Key, list.LastOrDefault(r => r.Name is not null).Name ?? L.T("Видеоадаптер"), last.MemTotal,
                 last.Util, last.Temp, last.Power, last.Fan, last.Mem, last.Ts,
                 list.Average(r => r.Util), list.Max(r => r.UtilMax),
                 temps.Count > 0 ? temps.Max(r => r.TempMax ?? r.Temp) : null,

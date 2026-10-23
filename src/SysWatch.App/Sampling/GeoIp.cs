@@ -55,7 +55,7 @@ public sealed class GeoIp
 
     public async Task<bool> DownloadAsync()
     {
-        lock (_gate) _status = "Скачиваю базу стран…";
+        lock (_gate) _status = L.T("Скачиваю базу стран…");
         try
         {
             Directory.CreateDirectory(Dir);
@@ -73,12 +73,12 @@ public sealed class GeoIp
                 lock (_gate) { Unload(); _status = null; }
                 return true;
             }
-            lock (_gate) _status = "Не удалось скачать базу: сайт db-ip.com не ответил.";
+            lock (_gate) _status = L.T("Не удалось скачать базу: сайт db-ip.com не ответил.");
             return false;
         }
         catch (Exception ex)
         {
-            lock (_gate) _status = "Не удалось скачать базу: " + ex.Message;
+            lock (_gate) _status = L.T("Не удалось скачать базу: {0}", ex.Message);
             return false;
         }
     }

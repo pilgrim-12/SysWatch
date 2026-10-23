@@ -2,15 +2,16 @@ import { useMemo, useState } from 'react';
 import { api, type SysEvent } from '../api';
 import { useLoad } from '../hooks';
 import { RANGES, appLabel, timeSec } from '../format';
+import { t } from '../i18n';
 
 const KINDS: { key: SysEvent['kind'] | 'all'; label: string }[] = [
-  { key: 'all', label: 'Все' },
-  { key: 'start', label: 'Запуски' },
-  { key: 'stop', label: 'Завершения' },
-  { key: 'dns', label: 'DNS-запросы' },
+  { key: 'all', label: t('Все') },
+  { key: 'start', label: t('Запуски') },
+  { key: 'stop', label: t('Завершения') },
+  { key: 'dns', label: t('DNS-запросы') },
 ];
 
-const KIND_LABEL: Record<SysEvent['kind'], string> = { start: 'запуск', stop: 'завершение', dns: 'DNS' };
+const KIND_LABEL: Record<SysEvent['kind'], string> = { start: t('запуск'), stop: t('завершение'), dns: 'DNS' };
 
 export function Events({ range, setRange, onApp }: { range: number; setRange: (m: number) => void; onApp: (n: string) => void }) {
   const ev = useLoad(() => api.events(range), [range], 30_000);
@@ -40,12 +41,12 @@ export function Events({ range, setRange, onApp }: { range: number; setRange: (m
     <>
       <div className="head">
         <div>
-          <h1>События</h1>
-          <p>Запуски и завершения процессов, DNS-запросы. Видны даже процессы, которые прожили меньше секунды.</p>
+          <h1>{t('События')}</h1>
+          <p>{t('Запуски и завершения процессов, DNS-запросы. Видны даже процессы, которые прожили меньше секунды.')}</p>
         </div>
         <div className="head-tools">
-          <input className="search" placeholder="Программа или домен" value={q} onChange={e => setQ(e.target.value)} />
-          <div className="seg" role="group" aria-label="Период">
+          <input className="search" placeholder={t('Программа или домен')} value={q} onChange={e => setQ(e.target.value)} />
+          <div className="seg" role="group" aria-label={t('Период')}>
             {RANGES.slice(0, 3).map(r => (
               <button key={r.minutes} aria-pressed={range === r.minutes} onClick={() => setRange(r.minutes)}>{r.label}</button>
             ))}
@@ -54,23 +55,23 @@ export function Events({ range, setRange, onApp }: { range: number; setRange: (m
       </div>
 
       <div className="filters" style={{ marginBottom: 12 }}>
-        <div className="seg" role="group" aria-label="Тип события">
+        <div className="seg" role="group" aria-label={t('Тип события')}>
           {KINDS.map(k => <button key={k.key} aria-pressed={kind === k.key} onClick={() => setKind(k.key)}>{k.label}</button>)}
         </div>
-        <span className="dim" style={{ color: 'var(--muted)' }}>{rows.length === 500 ? 'показаны последние 500' : `${rows.length}`}</span>
+        <span className="dim" style={{ color: 'var(--muted)' }}>{rows.length === 500 ? t('показаны последние 500') : `${rows.length}`}</span>
       </div>
 
-      {ev.error && <div className="error">Не удалось загрузить события: {ev.error}</div>}
+      {ev.error && <div className="error">{t('Не удалось загрузить события: {0}', ev.error)}</div>}
 
       <div className="panel">
-        {!rows.length ? <div className="empty">{ev.loading ? 'Загружаю…' : 'Событий нет.'}</div> : rows.map((e, i) => (
+        {!rows.length ? <div className="empty">{ev.loading ? t('Загружаю…') : t('Событий нет.')}</div> : rows.map((e, i) => (
           <div className="ev" key={i}>
             <time title={e.count > 1 ? `${timeSec(e.first)}–${timeSec(e.ts)}` : undefined}>{timeSec(e.ts)}</time>
             <span className={`ev-kind ${e.kind}`}>{KIND_LABEL[e.kind]}</span>
             <span className="flow-app" title={`${e.app}, PID ${e.pid}`} onClick={() => onApp(e.app)}>{appLabel(e.app)}</span>
             <span className="detail" title={e.detail ?? ''}>
               {e.detail ?? ''}
-              {e.count > 1 && <span className="repeat"> ×{e.count}, с {timeSec(e.first)}</span>}
+              {e.count > 1 && <span className="repeat"> {t('×{0}, с {1}', e.count, timeSec(e.first))}</span>}
             </span>
           </div>
         ))}

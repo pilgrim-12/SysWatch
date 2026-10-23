@@ -30,8 +30,8 @@ public sealed class Connections(Func<Dictionary<string, string>> ipToDomain, Geo
     private static extern uint GetExtendedUdpTable(IntPtr table, ref int size, bool order, int af, int tableClass, uint reserved);
 
     private static readonly string[] States =
-        ["?", "закрыто", "слушает", "подключается", "принимает", "установлено", "закрывается", "закрывается",
-         "закрывается", "закрывается", "закрывается", "ожидание", "удаляется"];
+        ["?", L.K("закрыто"), L.K("слушает"), L.K("подключается"), L.K("принимает"), L.K("установлено"), L.K("закрывается"), L.K("закрывается"),
+         L.K("закрывается"), L.K("закрывается"), L.K("закрывается"), L.K("ожидание"), L.K("удаляется")];
 
     private readonly object _gate = new();
     private readonly Dictionary<string, ConnRow> _known = new();
@@ -77,7 +77,7 @@ public sealed class Connections(Func<Dictionary<string, string>> ipToDomain, Geo
                 _domains.TryGetValue(remote, out var domain);
                 if (domain is null && IPAddress.IsLoopback(r.RemoteIp)) domain = "localhost";
 
-                var state = r.Proto == "UDP" ? "слушает" : r.State < States.Length ? States[r.State] : "?";
+                var state = r.Proto == "UDP" ? L.T("слушает") : r.State < States.Length ? L.T(States[r.State]) : "?";
                 long first = _known.TryGetValue(key, out var old) && old.ClosedAt is null ? old.FirstSeen : now;
 
                 // Доступен из сети: слушает не только на 127.0.0.1/::1, а на всех или внешних адресах.
@@ -94,7 +94,7 @@ public sealed class Connections(Func<Dictionary<string, string>> ipToDomain, Geo
             {
                 if (alive.Contains(key)) continue;
                 var row = _known[key];
-                if (row.ClosedAt is null) _known[key] = row with { ClosedAt = now, State = "закрыто" };
+                if (row.ClosedAt is null) _known[key] = row with { ClosedAt = now, State = L.T("закрыто") };
                 else if (now - row.ClosedAt > KeepClosedSeconds) _known.Remove(key);
             }
 

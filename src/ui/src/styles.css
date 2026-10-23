@@ -764,3 +764,6 @@ ul.plain li { padding: 2px 0; }
 .gpu-big b { font-size: 30px; font-weight: 600; color: #7EE0A1; line-height: 1; }
 .gpu-big span { color: var(--muted); font-size: 13px; }
 .chart-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 14px; }
+.pending-note { display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap; }
+.lang-pick { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: auto 10px 10px; color: var(--muted); font-size: 13px; }
+.lang-pick + .rail-foot { margin-top: 0; }

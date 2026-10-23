@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Data.Sqlite;
 
 namespace SysWatch.App.Anomalies;
@@ -31,6 +32,30 @@ public sealed class AnomalyStore
             CREATE TABLE IF NOT EXISTS ignore(rule TEXT NOT NULL, app TEXT NOT NULL COLLATE NOCASE, PRIMARY KEY(rule, app));
             CREATE TABLE IF NOT EXISTS state(k TEXT PRIMARY KEY, v TEXT);
             """);
+
+        // Заголовок и описание хранятся русским шаблоном + аргументами, переводятся при чтении (колонка args — с версии с языками).
+        bool hasArgs = false;
+        using (var cmd = c.CreateCommand())
+        {
+            cmd.CommandText = "PRAGMA table_info(anomaly)";
+            using var r = cmd.ExecuteReader();
+            while (r.Read()) if (r.GetString(1) == "args") hasArgs = true;
+        }
+        if (!hasArgs) Exec(c, "ALTER TABLE anomaly ADD COLUMN args TEXT");
+    }
+
+    /// <summary>Перевести шаблон на текущий язык. Аргументы тоже пробуем перевести: это могут быть подписи вроде «Служба».</summary>
+    private static string Localize(string template, string[]? args)
+    {
+        if (args is null || args.Length == 0) return L.T(template);
+        return L.T(template, args.Select(a => (object?)L.T(a)).ToArray());
+    }
+
+    private static string[]? ParseArgs(string? json)
+    {
+        if (string.IsNullOrEmpty(json)) return null;
+        try { return JsonSerializer.Deserialize<string[]>(json); }
+        catch (JsonException) { return null; }
     }
 
     private SqliteConnection Open()
@@ -57,20 +82,23 @@ public sealed class AnomalyStore
     }
 
     /// <summary>Записать аномалию. Возвращает её, если она новая и не в списке игнорируемых.</summary>
-    public Anomaly? Add(long ts, string rule, string severity, string app, string title, string detail, string key)
+    /// <param name="title">Русский шаблон (ключ словаря), помеченный L.K.</param>
+    /// <param name="detail">Русский шаблон с {0}, {1}… — аргументы в args.</param>
+    public Anomaly? Add(long ts, string rule, string severity, string app, string title, string detail, string key, string[]? args = null)
     {
         using var c = Open();
         if (Scalar(c, "SELECT 1 FROM ignore WHERE rule = $r AND app = $a", ("$r", rule), ("$a", app)) is not null)
             return null;
 
         int n = Exec(c, """
-            INSERT OR IGNORE INTO anomaly(ts, rule, severity, app, title, detail, key)
-            VALUES($ts, $r, $s, $a, $t, $d, $k)
-            """, ("$ts", ts), ("$r", rule), ("$s", severity), ("$a", app), ("$t", title), ("$d", detail), ("$k", key));
+            INSERT OR IGNORE INTO anomaly(ts, rule, severity, app, title, detail, key, args)
+            VALUES($ts, $r, $s, $a, $t, $d, $k, $args)
+            """, ("$ts", ts), ("$r", rule), ("$s", severity), ("$a", app), ("$t", title), ("$d", detail), ("$k", key),
+            ("$args", args is null ? null : JsonSerializer.Serialize(args)));
         if (n == 0) return null;
 
         long id = (long)Scalar(c, "SELECT last_insert_rowid()")!;
-        return new Anomaly(id, ts, rule, severity, app, title, detail, false);
+        return new Anomaly(id, ts, rule, severity, app, Localize(title, null), Localize(detail, args), false);
     }
 
     public AnomalyList List(long fromUnix)
@@ -80,14 +108,17 @@ public sealed class AnomalyStore
         using (var cmd = c.CreateCommand())
         {
             cmd.CommandText = """
-                SELECT id, ts, rule, severity, app, title, detail, seen FROM anomaly
+                SELECT id, ts, rule, severity, app, title, detail, seen, args FROM anomaly
                 WHERE ts >= $from ORDER BY ts DESC LIMIT 500
                 """;
             cmd.Parameters.AddWithValue("$from", fromUnix);
             using var r = cmd.ExecuteReader();
             while (r.Read())
+            {
+                var args = ParseArgs(r.IsDBNull(8) ? null : r.GetString(8));
                 items.Add(new Anomaly(r.GetInt64(0), r.GetInt64(1), r.GetString(2), r.GetString(3), r.GetString(4),
-                    r.GetString(5), r.GetString(6), r.GetInt64(7) != 0));
+                    Localize(r.GetString(5), null), Localize(r.GetString(6), args), r.GetInt64(7) != 0));
+            }
         }
 
         int unseen = Convert.ToInt32(Scalar(c, "SELECT COUNT(*) FROM anomaly WHERE seen = 0"));

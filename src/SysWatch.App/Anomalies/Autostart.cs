@@ -34,7 +34,7 @@ public static class Autostart
                 foreach (var name in key.GetValueNames())
                 {
                     var cmd = key.GetValue(name)?.ToString() ?? "";
-                    list.Add(new AutostartEntry($"run|{hiveName}\\{path}|{name}|{cmd}", $"Реестр {hiveName}\\…\\{Path.GetFileName(path)}", name, cmd, true));
+                    list.Add(new AutostartEntry($"run|{hiveName}\\{path}|{name}|{cmd}", $"{hiveName}\\…\\{Path.GetFileName(path)}", name, cmd, true));
                 }
             }
             catch (Exception) { /* нет доступа — пропускаем */ }
@@ -47,7 +47,7 @@ public static class Autostart
             foreach (var f in Directory.EnumerateFiles(dir))
             {
                 if (Path.GetFileName(f).Equals("desktop.ini", StringComparison.OrdinalIgnoreCase)) continue;
-                list.Add(new AutostartEntry($"startup|{f}", "Папка «Автозагрузка»", Path.GetFileName(f), f, true));
+                list.Add(new AutostartEntry($"startup|{f}", L.K("Папка «Автозагрузка»"), Path.GetFileName(f), f, true));
             }
         }
 
@@ -58,7 +58,7 @@ public static class Autostart
             foreach (var f in Directory.EnumerateFiles(tasks, "*", opts))
             {
                 var rel = Path.GetRelativePath(tasks, f);
-                list.Add(new AutostartEntry($"task|{rel}", "Планировщик заданий", rel, "", true));
+                list.Add(new AutostartEntry($"task|{rel}", L.K("Планировщик заданий"), rel, "", true));
             }
         }
 
@@ -75,7 +75,7 @@ public static class Autostart
                     int type = s.GetValue("Type") is int t ? t : 0;
                     bool driver = (type & 0x3) != 0;
                     var cmd = image.ToString() ?? "";
-                    list.Add(new AutostartEntry($"service|{name}|{cmd}", driver ? "Драйвер" : "Служба", name, cmd, false));
+                    list.Add(new AutostartEntry($"service|{name}|{cmd}", driver ? L.K("Драйвер") : L.K("Служба"), name, cmd, false));
                 }
             }
         }

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { api } from '../api';
 import { useLoad, useSort } from '../hooks';
 import { RANGES, appLabel, bytes, dayTime } from '../format';
+import { t } from '../i18n';
 
 type Key = 'domain' | 'rx' | 'tx' | 'apps' | 'firstSeen';
 
@@ -27,12 +28,12 @@ export function Network({ range, setRange, onApp }: { range: number; setRange: (
     <>
       <div className="head">
         <div>
-          <h1>Сеть</h1>
-          <p>Какие программы с какими адресами обменивались данными. Домен берётся из DNS-запроса программы; если его нет, показан IP.</p>
+          <h1>{t('Сеть')}</h1>
+          <p>{t('Какие программы с какими адресами обменивались данными. Домен берётся из DNS-запроса программы; если его нет, показан IP.')}</p>
         </div>
         <div className="head-tools">
-          <input className="search" placeholder="Программа или домен" value={q} onChange={e => setQ(e.target.value)} />
-          <div className="seg" role="group" aria-label="Период">
+          <input className="search" placeholder={t('Программа или домен')} value={q} onChange={e => setQ(e.target.value)} />
+          <div className="seg" role="group" aria-label={t('Период')}>
             {RANGES.map(r => (
               <button key={r.minutes} aria-pressed={range === r.minutes} onClick={() => setRange(r.minutes)}>{r.label}</button>
             ))}
@@ -40,24 +41,24 @@ export function Network({ range, setRange, onApp }: { range: number; setRange: (
         </div>
       </div>
 
-      {net.error && <div className="error">Не удалось загрузить сеть: {net.error}</div>}
+      {net.error && <div className="error">{t('Не удалось загрузить сеть: {0}', net.error)}</div>}
 
       {d && (
         <div className="facts">
-          <div className="fact"><b style={{ color: 'var(--net)' }}>{bytes(d.totals.rx)}</b><span>получено</span></div>
-          <div className="fact"><b>{bytes(d.totals.tx)}</b><span>отправлено</span></div>
-          <div className="fact"><b>{d.totals.domains}</b><span>адресов{newCount ? `, новых сегодня: ${newCount}` : ''}</span></div>
-          <div className="fact"><b>{d.totals.apps}</b><span>программ выходило в сеть</span></div>
+          <div className="fact"><b style={{ color: 'var(--net)' }}>{bytes(d.totals.rx)}</b><span>{t('получено')}</span></div>
+          <div className="fact"><b>{bytes(d.totals.tx)}</b><span>{t('отправлено')}</span></div>
+          <div className="fact"><b>{d.totals.domains}</b><span>{newCount ? t('адресов, новых сегодня: {0}', newCount) : t('адресов')}</span></div>
+          <div className="fact"><b>{d.totals.apps}</b><span>{t('программ выходило в сеть')}</span></div>
         </div>
       )}
 
       <section className="block">
-        <h2>Потоки <small>программа и адрес; светлая часть полосы — получено, тёмная — отправлено</small></h2>
+        <h2>{t('Потоки')} <small>{t('программа и адрес; светлая часть полосы — получено, тёмная — отправлено')}</small></h2>
         <div className="panel">
-          {!flows.length ? <div className="empty">{net.loading ? 'Загружаю…' : 'Сетевой активности за период нет.'}</div> : flows.map(f => (
+          {!flows.length ? <div className="empty">{net.loading ? t('Загружаю…') : t('Сетевой активности за период нет.')}</div> : flows.map(f => (
             <div className="flow-row" key={f.app + f.domain}>
               <span className="flow-app" title={f.app} onClick={() => onApp(f.app)}>{appLabel(f.app)}</span>
-              <div className="flow-track" title={`получено ${bytes(f.rx)}, отправлено ${bytes(f.tx)}, подключений ${f.connects}`}>
+              <div className="flow-track" title={t('получено {0}, отправлено {1}, подключений {2}', bytes(f.rx), bytes(f.tx), f.connects)}>
                 <div className="flow-rx" style={{ width: `${(f.rx / maxFlow) * 100}%` }} />
                 <div className="flow-tx" style={{ left: `${(f.rx / maxFlow) * 100}%`, width: `${Math.max(0.3, (f.tx / maxFlow) * 100)}%` }} />
               </div>
@@ -70,22 +71,22 @@ export function Network({ range, setRange, onApp }: { range: number; setRange: (
       </section>
 
       <section className="block">
-        <h2>Адреса <small>{domains.length}</small></h2>
+        <h2>{t('Адреса')} <small>{domains.length}</small></h2>
         <div className="panel scroll">
           <table className="table">
             <thead>
               <tr>
-                <th {...thProps('domain')}>Адрес</th>
-                <th {...thProps('apps')} style={{ textAlign: 'left' }}>Программы</th>
-                <th {...thProps('rx')}>Получено</th>
-                <th {...thProps('tx')}>Отправлено</th>
-                <th {...thProps('firstSeen')}>Впервые</th>
+                <th {...thProps('domain')}>{t('Адрес')}</th>
+                <th {...thProps('apps')} style={{ textAlign: 'left' }}>{t('Программы')}</th>
+                <th {...thProps('rx')}>{t('Получено')}</th>
+                <th {...thProps('tx')}>{t('Отправлено')}</th>
+                <th {...thProps('firstSeen')}>{t('Впервые')}</th>
               </tr>
             </thead>
             <tbody>
               {domains.map(r => (
                 <tr key={r.domain} onClick={() => onApp(r.apps[0])}>
-                  <td><span className="name">{r.domain} {r.newToday && <span className="tag new">новый</span>}</span></td>
+                  <td><span className="name">{r.domain} {r.newToday && <span className="tag new">{t('новый')}</span>}</span></td>
                   <td className="dim" style={{ textAlign: 'left' }}>{r.apps.map(appLabel).join(', ')}</td>
                   <td>{bytes(r.rx)}</td>
                   <td className="dim">{bytes(r.tx)}</td>

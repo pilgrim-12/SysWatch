@@ -47,8 +47,7 @@ public sealed class MainForm : Form
         catch (Exception ex)
         {
             MessageBox.Show(this,
-                "Не удалось запустить встроенный браузер WebView2.\n\n" + ex.Message +
-                "\n\nУстановите WebView2 Runtime: https://go.microsoft.com/fwlink/p/?LinkId=2124703",
+                L.T("Не удалось запустить встроенный браузер WebView2.\n\n{0}\n\nУстановите WebView2 Runtime: https://go.microsoft.com/fwlink/p/?LinkId=2124703", ex.Message),
                 "SysWatch", MessageBoxButtons.OK, MessageBoxIcon.Error);
             Close();
         }

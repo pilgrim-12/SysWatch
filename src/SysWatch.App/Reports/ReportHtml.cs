@@ -7,26 +7,29 @@ namespace SysWatch.App.Reports;
 /// <summary>Отчёт за период одним HTML-файлом: без скриптов и внешних ссылок, открывается и печатается где угодно.</summary>
 public static class ReportHtml
 {
-    private static readonly CultureInfo Ru = CultureInfo.GetCultureInfo("ru-RU");
+    // Язык и форматы — те, что выбраны в окне (или язык трея).
+    private static CultureInfo Ru => L.Culture;
 
     public static readonly Dictionary<string, string> RuleNames = new()
     {
-        ["unsigned_net"] = "Программа без подписи выходит в сеть",
-        ["temp_exec"] = "Запуск из временной папки или «Загрузок»",
-        ["new_program"] = "Новая программа",
-        ["new_domain"] = "Новый адрес в сети",
-        ["autostart"] = "Новое в автозагрузке",
-        ["cpu"] = "Долгая нагрузка на процессор",
-        ["memory"] = "Память растёт без снижения",
-        ["exposed_port"] = "Порт открыт в сеть",
+        ["unsigned_net"] = L.K("Программа без подписи выходит в сеть"),
+        ["temp_exec"] = L.K("Запуск из временной папки или «Загрузок»"),
+        ["new_program"] = L.K("Новая программа"),
+        ["new_domain"] = L.K("Новый адрес в сети"),
+        ["autostart"] = L.K("Новое в автозагрузке"),
+        ["cpu"] = L.K("Долгая нагрузка на процессор"),
+        ["memory"] = L.K("Память растёт без снижения"),
+        ["exposed_port"] = L.K("Порт открыт в сеть"),
     };
+
+    public static string RuleName(string rule) => RuleNames.TryGetValue(rule, out var rn) ? L.T(rn) : rule;
 
     /// <summary>Сохранить в «Документы\SysWatch» и вернуть путь.</summary>
     public static string Save(Report r)
     {
         var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "SysWatch");
         Directory.CreateDirectory(dir);
-        var name = $"Отчёт SysWatch {Local(r.From):yyyy-MM-dd} — {Local(r.To):yyyy-MM-dd HH-mm}.html";
+        var name = L.T("Отчёт SysWatch {0:yyyy-MM-dd} — {1:yyyy-MM-dd HH-mm}.html", Local(r.From), Local(r.To));
         var path = Path.Combine(dir, name);
         File.WriteAllText(path, Render(r), new UTF8Encoding(true));
         return path;
@@ -39,20 +42,20 @@ public static class ReportHtml
 
     private static string Bytes(long b) => b switch
     {
-        >= 1L << 40 => (b / (double)(1L << 40)).ToString("F1", Ru) + " ТБ",
-        >= 1L << 30 => (b / (double)(1L << 30)).ToString("F1", Ru) + " ГБ",
-        >= 1L << 20 => (b / (double)(1L << 20)).ToString("F0", Ru) + " МБ",
-        >= 1L << 10 => (b / (double)(1L << 10)).ToString("F0", Ru) + " КБ",
-        _ => b + " Б",
+        >= 1L << 40 => (b / (double)(1L << 40)).ToString("F1", Ru) + " " + L.T("ТБ"),
+        >= 1L << 30 => (b / (double)(1L << 30)).ToString("F1", Ru) + " " + L.T("ГБ"),
+        >= 1L << 20 => (b / (double)(1L << 20)).ToString("F0", Ru) + " " + L.T("МБ"),
+        >= 1L << 10 => (b / (double)(1L << 10)).ToString("F0", Ru) + " " + L.T("КБ"),
+        _ => b + " " + L.T("Б"),
     };
 
     public static string Render(Report r)
     {
         var h = new StringBuilder();
         h.Append($$"""
-            <!doctype html><html lang="ru"><head><meta charset="utf-8">
+            <!doctype html><html lang="{{L.Lang}}"><head><meta charset="utf-8">
             <meta name="viewport" content="width=device-width,initial-scale=1">
-            <title>Отчёт SysWatch</title>
+            <title>{{E(L.T("Отчёт SysWatch"))}}</title>
             <style>
             :root{--bg:#fff;--fg:#14202e;--dim:#5b6878;--line:#e3e8ee;--card:#f6f8fa;--cpu:#c98a12;--mem:#7c5ce0;--disk:#d65a47;--net:#1f8fa6;--bad:#c2410c}
             @media (prefers-color-scheme:dark){:root{--bg:#0f1a2a;--fg:#e7edf4;--dim:#93a1b3;--line:#22324a;--card:#15233a;--cpu:#F2B544;--mem:#A78BFA;--disk:#F27C6B;--net:#4FC3D9;--bad:#fb923c} }
@@ -73,23 +76,24 @@ public static class ReportHtml
             .bad{color:var(--bad)}footer{margin-top:40px;color:var(--dim);font-size:12px}
             @media print{body{background:#fff;color:#000}.card,.chart,.ep{break-inside:avoid} }
             </style></head><body><main>
-            <h1>Отчёт SysWatch</h1>
-            <p class="dim">{{E(When(r.From))}} — {{E(When(r.To))}} · компьютер {{E(Environment.MachineName)}} · данные за {{r.Hours.ToString("F0", Ru)}} ч</p>
+            <h1>{{E(L.T("Отчёт SysWatch"))}}</h1>
+            <p class="dim">{{E(When(r.From))}} — {{E(When(r.To))}} · {{E(L.T("компьютер {0} · данные за {1:F0} ч", Environment.MachineName, r.Hours))}}</p>
             <div class="cards">
-            <div class="card"><b style="color:var(--cpu)">{{Pct(r.AvgCpu)}}</b><span>процессор в среднем, пик {{Pct(r.PeakCpu)}}</span></div>
-            <div class="card"><b style="color:var(--mem)">{{Pct(r.AvgMem)}}</b><span>память в среднем, пик {{Pct(r.PeakMem)}}</span></div>
-            <div class="card"><b>{{r.Episodes.Count}}</b><span>эпизодов перегрузки, всего {{r.SlowMinutes}} мин</span></div>
-            <div class="card"><b style="color:var(--net)">{{Bytes(r.NetRx)}}</b><span>получено из сети, отправлено {{Bytes(r.NetTx)}}</span></div>
-            <div class="card"><b style="color:var(--disk)">{{Bytes(r.IoRead + r.IoWrite)}}</b><span>прочитано и записано программами</span></div>
+            <div class="card"><b style="color:var(--cpu)">{{Pct(r.AvgCpu)}}</b><span>{{E(L.T("процессор в среднем, пик {0}", Pct(r.PeakCpu)))}}</span></div>
+            <div class="card"><b style="color:var(--mem)">{{Pct(r.AvgMem)}}</b><span>{{E(L.T("память в среднем, пик {0}", Pct(r.PeakMem)))}}</span></div>
+            <div class="card"><b>{{r.Episodes.Count}}</b><span>{{E(L.T("эпизодов перегрузки, всего {0} мин", r.SlowMinutes))}}</span></div>
+            <div class="card"><b style="color:var(--net)">{{Bytes(r.NetRx)}}</b><span>{{E(L.T("получено из сети, отправлено {0}", Bytes(r.NetTx)))}}</span></div>
+            <div class="card"><b style="color:var(--disk)">{{Bytes(r.IoRead + r.IoWrite)}}</b><span>{{E(L.T("прочитано и записано программами"))}}</span></div>
             </div>
             """);
 
-        h.Append("<h2>Загрузка за период</h2><div class=\"chart\">").Append(Chart(r.Points))
-         .Append("<div class=\"legend\"><span><i style=\"background:var(--cpu)\"></i>процессор</span><span><i style=\"background:var(--mem)\"></i>память</span></div></div>");
+        h.Append("<h2>").Append(E(L.T("Загрузка за период"))).Append("</h2><div class=\"chart\">").Append(Chart(r.Points))
+         .Append("<div class=\"legend\"><span><i style=\"background:var(--cpu)\"></i>").Append(E(L.T("процессор")))
+         .Append("</span><span><i style=\"background:var(--mem)\"></i>").Append(E(L.T("память"))).Append("</span></div></div>");
 
-        h.Append("<h2>Почему тормозило</h2>");
+        h.Append("<h2>").Append(E(L.T("Почему тормозило"))).Append("</h2>");
         if (r.Episodes.Count == 0)
-            h.Append("<p>Перегрузок не было: процессор ни разу не держался выше 75%, память — выше 90%.</p>");
+            h.Append("<p>").Append(E(L.T("Перегрузок не было: процессор ни разу не держался выше 75%, память — выше 90%."))).Append("</p>");
         foreach (var w in r.Episodes)
         {
             h.Append($"<div class=\"ep {(w.Kinds.Contains("cpu") ? "" : "mem")}\"><h3>{E(When(w.From))} — {E(Local(w.To).ToString("HH:mm", Ru))}</h3>");
@@ -98,56 +102,58 @@ public static class ReportHtml
             h.Append("</div>");
         }
 
-        h.Append("<h2>Кто больше всего потреблял</h2><div class=\"grid\">");
-        h.Append(Top("Процессор", r.TopCpu, a => Pct(a.Cpu)));
-        h.Append(Top("Память (пик)", r.TopMem, a => Bytes(a.Mem)));
-        h.Append(Top("Чтение и запись", r.TopIo, a => Bytes(a.Io)));
-        h.Append(Top("Сеть", r.TopNet, a => Bytes(a.Net)));
+        h.Append("<h2>").Append(E(L.T("Кто больше всего потреблял"))).Append("</h2><div class=\"grid\">");
+        h.Append(Top(L.T("Процессор"), r.TopCpu, a => Pct(a.Cpu)));
+        h.Append(Top(L.T("Память (пик)"), r.TopMem, a => Bytes(a.Mem)));
+        h.Append(Top(L.T("Чтение и запись"), r.TopIo, a => Bytes(a.Io)));
+        h.Append(Top(L.T("Сеть"), r.TopNet, a => Bytes(a.Net)));
         h.Append("</div>");
 
-        h.Append("<h2>Безопасность</h2>");
-        if (r.Anomalies.Count == 0) h.Append("<p>Аномалий не найдено.</p>");
+        h.Append("<h2>").Append(E(L.T("Безопасность"))).Append("</h2>");
+        if (r.Anomalies.Count == 0) h.Append("<p>").Append(E(L.T("Аномалий не найдено."))).Append("</p>");
         else
         {
-            h.Append("<table><tr><th>Что найдено</th><th class=\"n\">Сколько</th></tr>");
+            h.Append("<table><tr><th>").Append(E(L.T("Что найдено"))).Append("</th><th class=\"n\">").Append(E(L.T("Сколько"))).Append("</th></tr>");
             foreach (var a in r.Anomalies)
-                h.Append($"<tr><td>{E(RuleNames.GetValueOrDefault(a.Rule, a.Rule))}</td><td class=\"n\">{a.Count}</td></tr>");
+                h.Append($"<tr><td>{E(RuleName(a.Rule))}</td><td class=\"n\">{a.Count}</td></tr>");
             h.Append("</table>");
         }
         if (r.Notable.Count > 0)
         {
-            h.Append("<p style=\"margin-top:12px\"><b>Важное:</b></p><ul>");
+            h.Append("<p style=\"margin-top:12px\"><b>").Append(E(L.T("Важное:"))).Append("</b></p><ul>");
             foreach (var a in r.Notable) h.Append($"<li><span class=\"{(a.Severity == "high" ? "bad" : "")}\">{E(a.Title)}</span> — {E(a.App)} <span class=\"dim\">{E(When(a.Ts))}</span></li>");
             h.Append("</ul>");
         }
         if (r.NewPrograms.Count > 0)
-            h.Append($"<p><b>Впервые запускались:</b> {E(string.Join(", ", r.NewPrograms))}</p>");
+            h.Append("<p><b>").Append(E(L.T("Впервые запускались:"))).Append("</b> ").Append(E(string.Join(", ", r.NewPrograms))).Append("</p>");
 
         if (r.SystemDrive is { } d)
         {
-            h.Append($"<h2>Диск {E(d.Root)}</h2><p>Свободно {Bytes(d.Free)} из {Bytes(d.Total)}.");
+            h.Append("<h2>").Append(E(L.T("Диск {0}", d.Root))).Append("</h2><p>").Append(E(L.T("Свободно {0} из {1}.", Bytes(d.Free), Bytes(d.Total))));
             if (r.DiskGrowth is { Since: not null } g)
             {
-                h.Append($" С {E(When(g.Since!.Value))} занятое место {(g.DriveDelta >= 0 ? "выросло" : "уменьшилось")} на {Bytes(Math.Abs(g.DriveDelta))}.</p>");
+                h.Append(" ").Append(E(g.DriveDelta >= 0
+                    ? L.T("С {0} занятое место выросло на {1}.", When(g.Since!.Value), Bytes(Math.Abs(g.DriveDelta)))
+                    : L.T("С {0} занятое место уменьшилось на {1}.", When(g.Since!.Value), Bytes(Math.Abs(g.DriveDelta))))).Append("</p>");
                 var items = g.Items.Where(i => i.Delta > 0).Take(8).ToList();
                 if (items.Count > 0)
                 {
-                    h.Append("<table><tr><th>Папка</th><th class=\"n\">Прибавилось</th><th class=\"n\">Размер</th></tr>");
+                    h.Append("<table><tr><th>").Append(E(L.T("Папка"))).Append("</th><th class=\"n\">").Append(E(L.T("Прибавилось"))).Append("</th><th class=\"n\">").Append(E(L.T("Размер"))).Append("</th></tr>");
                     foreach (var i in items) h.Append($"<tr><td>{E(i.Path)}</td><td class=\"n\">+{Bytes(i.Delta)}</td><td class=\"n\">{Bytes(i.Size)}</td></tr>");
                     h.Append("</table>");
                 }
             }
-            else h.Append(" Для сравнения нужен снимок диска недельной давности.</p>");
+            else h.Append(" ").Append(E(L.T("Для сравнения нужен снимок диска недельной давности."))).Append("</p>");
         }
 
-        h.Append($"<footer>Собрано SysWatch {E(DateTime.Now.ToString("d MMMM yyyy, HH:mm", Ru))}. Данные не покидали компьютер.</footer></main></body></html>");
+        h.Append("<footer>").Append(E(L.T("Собрано SysWatch {0}. Данные не покидали компьютер.", DateTime.Now.ToString("d MMMM yyyy, HH:mm", Ru)))).Append("</footer></main></body></html>");
         return h.ToString();
     }
 
     private static string Top(string title, IReadOnlyList<ReportApp> rows, Func<ReportApp, string> value)
     {
         var s = new StringBuilder($"<div><table><tr><th>{E(title)}</th><th class=\"n\"></th></tr>");
-        if (rows.Count == 0) s.Append("<tr><td class=\"dim\">нет данных</td><td></td></tr>");
+        if (rows.Count == 0) s.Append("<tr><td class=\"dim\">").Append(E(L.T("нет данных"))).Append("</td><td></td></tr>");
         foreach (var a in rows) s.Append($"<tr><td>{E(a.Name)}</td><td class=\"n\">{E(value(a))}</td></tr>");
         return s.Append("</table></div>").ToString();
     }
@@ -155,9 +161,9 @@ public static class ReportHtml
     /// <summary>Две линии (процессор и память, 0–100%) в SVG, с подписями дней или часов.</summary>
     private static string Chart(IReadOnlyList<ReportPoint> pts)
     {
-        const int W = 940, H = 200, L = 36, B = 22;
-        if (pts.Count < 2) return "<p class=\"dim\">Мало данных для графика.</p>";
-        double X(int i) => L + (W - L - 6) * i / (double)(pts.Count - 1);
+        const int W = 940, H = 200, Left = 36, B = 22;
+        if (pts.Count < 2) return "<p class=\"dim\">" + E(L.T("Мало данных для графика.")) + "</p>";
+        double X(int i) => Left + (W - Left - 6) * i / (double)(pts.Count - 1);
         double Y(double v) => 6 + (H - B - 6) * (1 - v / 100);
 
         string Line(Func<ReportPoint, double?> f, string color)
@@ -172,9 +178,9 @@ public static class ReportHtml
             return $"<path d=\"{sb}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"2\" stroke-linejoin=\"round\"/>";
         }
 
-        var s = new StringBuilder($"<svg viewBox=\"0 0 {W} {H}\" role=\"img\" aria-label=\"Загрузка процессора и памяти\">");
+        var s = new StringBuilder($"<svg viewBox=\"0 0 {W} {H}\" role=\"img\" aria-label=\"{E(L.T("Загрузка процессора и памяти"))}\">");
         foreach (var v in new[] { 0, 50, 100 })
-            s.Append($"<line x1=\"{L}\" x2=\"{W - 6}\" y1=\"{Y(v):F0}\" y2=\"{Y(v):F0}\" stroke=\"var(--line)\"/><text x=\"{L - 6}\" y=\"{Y(v) + 4:F0}\" text-anchor=\"end\" font-size=\"11\" fill=\"var(--dim)\">{v}%</text>");
+            s.Append($"<line x1=\"{Left}\" x2=\"{W - 6}\" y1=\"{Y(v):F0}\" y2=\"{Y(v):F0}\" stroke=\"var(--line)\"/><text x=\"{Left - 6}\" y=\"{Y(v) + 4:F0}\" text-anchor=\"end\" font-size=\"11\" fill=\"var(--dim)\">{v}%</text>");
 
         bool week = pts[^1].Ts - pts[0].Ts > 2 * 86400;
         int every = Math.Max(1, pts.Count / 8);

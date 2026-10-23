@@ -60,7 +60,7 @@ public static class Docker
 
         var (ok, version) = Run(exe, "version --format {{.Server.Version}}", 10_000);
         if (!ok || string.IsNullOrWhiteSpace(version))
-            return new DockerInfo(true, false, null, "Docker не запущен. Запустите Docker Desktop и нажмите «Проверить заново» — тогда будут видны образы, контейнеры и тома.", [], [], [], 0, disk);
+            return new DockerInfo(true, false, null, L.T("Docker не запущен. Запустите Docker Desktop и нажмите «Проверить заново» — тогда будут видны образы, контейнеры и тома."), [], [], [], 0, disk);
 
         var images = new List<DockerImage>();
         var containers = new List<DockerContainer>();
@@ -109,8 +109,8 @@ public static class Docker
     public static ActionResult Act(string action, string id)
     {
         var exe = Exe();
-        if (exe is null) return new(false, "Docker не установлен.");
-        if (action is "rmi" or "rm" or "stop" or "volume-rm" && !SafeId.IsMatch(id)) return new(false, "Некорректный идентификатор.");
+        if (exe is null) return new(false, L.T("Docker не установлен."));
+        if (action is "rmi" or "rm" or "stop" or "volume-rm" && !SafeId.IsMatch(id)) return new(false, L.T("Некорректный идентификатор."));
 
         string args = action switch
         {
@@ -123,21 +123,21 @@ public static class Docker
             "prune-cache" => "builder prune -f",
             _ => "",
         };
-        if (args.Length == 0) return new(false, "Неизвестное действие.");
+        if (args.Length == 0) return new(false, L.T("Неизвестное действие."));
 
         var (ok, output) = Run(exe, args, 120_000, captureError: true);
-        if (ok) return new(true, action.StartsWith("prune") ? Freed(output) : "Готово.");
+        if (ok) return new(true, action.StartsWith("prune") ? Freed(output) : L.T("Готово."));
 
-        var err = output.Split('\n').Select(l => l.Trim()).LastOrDefault(l => l.Length > 0) ?? "Docker вернул ошибку.";
+        var err = output.Split('\n').Select(l => l.Trim()).LastOrDefault(l => l.Length > 0) ?? L.K("Docker вернул ошибку.");
         if (err.Contains("is being used") || err.Contains("conflict"))
-            err = "Объект используется контейнером — сначала удалите или остановите контейнер.";
-        return new(false, err);
+            err = L.K("Объект используется контейнером — сначала удалите или остановите контейнер.");
+        return new(false, L.T(err));
     }
 
     private static string Freed(string output)
     {
         var m = Regex.Match(output, @"reclaimed space:\s*(\S+)", RegexOptions.IgnoreCase);
-        return m.Success ? $"Освобождено внутри Docker: {m.Groups[1].Value}. Файл диска Docker на Windows от этого не уменьшается." : "Готово.";
+        return m.Success ? L.T("Освобождено внутри Docker: {0}. Файл диска Docker на Windows от этого не уменьшается.", m.Groups[1].Value) : L.T("Готово.");
     }
 
     private static IEnumerable<JsonElement> Arr(JsonElement root, string name) =>
@@ -178,7 +178,7 @@ public static class Docker
             })!;
             var err = p.StandardError.ReadToEndAsync();
             var outText = p.StandardOutput.ReadToEndAsync();
-            if (!p.WaitForExit(timeoutMs)) { try { p.Kill(true); } catch (Exception) { } return (false, "Docker не ответил вовремя."); }
+            if (!p.WaitForExit(timeoutMs)) { try { p.Kill(true); } catch (Exception) { } return (false, L.K("Docker не ответил вовремя.")); }
             var text = outText.Result + (captureError ? "\n" + err.Result : "");
             return (p.ExitCode == 0, p.ExitCode == 0 ? text : outText.Result + "\n" + err.Result);
         }
@@ -252,18 +252,18 @@ public static class NodeProjects
     public static ActionResult DeleteModules(string projectPath, IReadOnlyCollection<NodeProject> known)
     {
         if (!known.Any(p => p.Path.Equals(projectPath, StringComparison.OrdinalIgnoreCase)))
-            return new(false, "Этого проекта нет в списке.");
+            return new(false, L.T("Этого проекта нет в списке."));
         var modules = Path.Combine(projectPath, "node_modules");
-        if (!Directory.Exists(modules)) return new(false, "node_modules уже нет.");
+        if (!Directory.Exists(modules)) return new(false, L.T("node_modules уже нет."));
         try
         {
             // Удаляем навсегда: node_modules восстанавливается командой npm install.
             Directory.Delete(modules, recursive: true);
-            return new(true, $"node_modules удалена. Вернуть: npm install в папке {projectPath}");
+            return new(true, L.T("node_modules удалена. Вернуть: npm install в папке {0}", projectPath));
         }
         catch (Exception ex)
         {
-            return new(false, "Часть файлов занята (открыт редактор или dev-сервер?): " + ex.Message);
+            return new(false, L.T("Часть файлов занята (открыт редактор или dev-сервер?): {0}", ex.Message));
         }
     }
 

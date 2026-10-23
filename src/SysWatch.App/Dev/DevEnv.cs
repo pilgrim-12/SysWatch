@@ -40,6 +40,7 @@ public sealed class DevEnv(Installed installed)
 {
     private readonly object _gate = new();
     private DevEnvironment? _data;
+    private string? _dataLang; // тексты (заметки, названия групп) формируются на языке сканирования
     private bool _busy;
 
     private static string Pf => Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
@@ -52,16 +53,19 @@ public sealed class DevEnv(Installed installed)
     {
         lock (_gate)
         {
-            bool stale = _data is null || DateTimeOffset.UtcNow.ToUnixTimeSeconds() - _data.ScannedAt > 600;
+            // Сменили язык окна — пересканируем, чтобы заметки и названия были на новом языке.
+            var lang = L.Lang;
+            bool stale = _data is null || DateTimeOffset.UtcNow.ToUnixTimeSeconds() - _data.ScannedAt > 600 || _dataLang != lang;
             if ((refresh || stale) && !_busy)
             {
                 _busy = true;
                 var t = new Thread(() =>
                 {
+                    L.UseForRequest(lang);
                     DevEnvironment? result = null;
                     try { result = Scan(); }
                     catch (Exception) { /* оставим прошлый результат */ }
-                    lock (_gate) { if (result is not null) _data = result; _busy = false; }
+                    lock (_gate) { if (result is not null) { _data = result; _dataLang = lang; } _busy = false; }
                 }) { IsBackground = true, Priority = ThreadPriority.BelowNormal, Name = "DevEnv scan" };
                 t.Start();
             }
@@ -120,19 +124,19 @@ public sealed class DevEnv(Installed installed)
             catch (Exception) { /* один сломанный источник не мешает остальным */ }
         }
 
-        Add("dotnet", ".NET", "Для каждой основной версии обычно хватает последнего SDK: более старые патчи можно удалить.", () => Dotnet(programs));
+        Add("dotnet", ".NET", L.T("Для каждой основной версии обычно хватает последнего SDK: более старые патчи можно удалить."), () => Dotnet(programs));
         Add("netfx", ".NET Framework", null, NetFramework);
         Add("node", "Node.js", null, () => Node(programs));
-        Add("npm", "Глобальные пакеты npm", null, NpmGlobal);
+        Add("npm", L.T("Глобальные пакеты npm"), null, NpmGlobal);
         Add("python", "Python", null, () => Python(programs));
-        Add("java", "Java (JDK)", "Без поддержки — версии не-LTS: на них не выходят исправления безопасности.", () => Java(programs));
-        Add("android", "Android SDK", "Нужен для React Native и Android Studio. Старые платформы и build-tools — частый источник лишних гигабайт.", Android);
-        Add("langs", "Другие языки", null, () => OtherLangs(programs));
-        Add("ide", "IDE и редакторы", null, () => Ides(programs));
-        Add("winsdk", "Windows SDK и Visual C++", null, () => WindowsSdk(programs));
-        Add("containers", "WSL и Docker", "Диски WSL и Docker сами не уменьшаются после удаления данных внутри — их нужно сжимать отдельно.", () => Containers(programs));
-        Add("tools", "Инструменты командной строки", null, () => CliTools(programs));
-        Add("pm", "Менеджеры пакетов", null, PackageManagers);
+        Add("java", "Java (JDK)", L.T("Без поддержки — версии не-LTS: на них не выходят исправления безопасности."), () => Java(programs));
+        Add("android", "Android SDK", L.T("Нужен для React Native и Android Studio. Старые платформы и build-tools — частый источник лишних гигабайт."), Android);
+        Add("langs", L.T("Другие языки"), null, () => OtherLangs(programs));
+        Add("ide", L.T("IDE и редакторы"), null, () => Ides(programs));
+        Add("winsdk", L.T("Windows SDK и Visual C++"), null, () => WindowsSdk(programs));
+        Add("containers", L.T("WSL и Docker"), L.T("Диски WSL и Docker сами не уменьшаются после удаления данных внутри — их нужно сжимать отдельно."), () => Containers(programs));
+        Add("tools", L.T("Инструменты командной строки"), null, () => CliTools(programs));
+        Add("pm", L.T("Менеджеры пакетов"), null, PackageManagers);
 
         var services = new List<DevService>();
         try { services = Services(); } catch (Exception) { }
@@ -182,7 +186,7 @@ public sealed class DevEnv(Installed installed)
         // Рабочие нагрузки (MAUI, wasm-tools и т. п.) — большие папки packs и workloads.
         var packs = Path.Combine(Pf, "dotnet", "packs");
         if (Directory.Exists(packs))
-            list.Add(new DevItem("Packs и workloads", "", packs, DirSize(packs), null, null, "MAUI, Android, iOS, WebAssembly и другие нагрузки", null));
+            list.Add(new DevItem(L.T("Packs и workloads"), "", packs, DirSize(packs), null, null, L.T("MAUI, Android, iOS, WebAssembly и другие нагрузки"), null));
         return list;
     }
 
@@ -199,11 +203,11 @@ public sealed class DevEnv(Installed installed)
             };
             bool supported = rel >= 394802;
             list.Add(new DevItem(".NET Framework 4.x", v, k.GetValue("InstallPath") as string, null,
-                supported ? "ok" : "eol", null, "Входит в Windows, удалить нельзя", null));
+                supported ? "ok" : "eol", null, L.T("Входит в Windows, удалить нельзя"), null));
         }
         using var k35 = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\NET Framework Setup\NDP\v3.5");
         if (k35?.GetValue("Install") is int i && i == 1)
-            list.Add(new DevItem(".NET Framework 3.5", (k35.GetValue("Version") as string) ?? "3.5", null, null, "ok", null, "Компонент Windows: отключается в «Компонентах Windows»", null));
+            list.Add(new DevItem(".NET Framework 3.5", (k35.GetValue("Version") as string) ?? "3.5", null, null, "ok", null, L.T("Компонент Windows: отключается в «Компонентах Windows»"), null));
         return list;
     }
 
@@ -214,7 +218,8 @@ public sealed class DevEnv(Installed installed)
         var list = new List<DevItem>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        void AddNode(string exe, string source)
+        // source — «установщик» (официальный) или имя менеджера версий (nvm, Volta, fnm — имена не переводим).
+        void AddNode(string exe, string source, bool installer = false)
         {
             if (!File.Exists(exe) || !seen.Add(Path.GetFullPath(exe))) return;
             var v = (FileVersion(exe) ?? "").TrimStart('v');
@@ -222,11 +227,11 @@ public sealed class DevEnv(Installed installed)
             var (s, u) = ByDate(NodeEol.TryGetValue(major, out var d) ? d : null);
             if (major is > 0 and < 10) s = "eol";
             var dir = Path.GetDirectoryName(exe)!;
-            list.Add(new DevItem("Node.js", v, dir, source == "установщик" ? null : DirSize(dir), s, u, source,
-                source == "установщик" ? Match(programs, p => p.Name.StartsWith("Node.js", StringComparison.OrdinalIgnoreCase)) : null));
+            list.Add(new DevItem("Node.js", v, dir, installer ? null : DirSize(dir), s, u, source,
+                installer ? Match(programs, p => p.Name.StartsWith("Node.js", StringComparison.OrdinalIgnoreCase)) : null));
         }
 
-        AddNode(Path.Combine(Pf, "nodejs", "node.exe"), "установщик");
+        AddNode(Path.Combine(Pf, "nodejs", "node.exe"), L.T("установщик"), installer: true);
 
         var nvm = Environment.GetEnvironmentVariable("NVM_HOME", EnvironmentVariableTarget.User)
                   ?? Environment.GetEnvironmentVariable("NVM_HOME", EnvironmentVariableTarget.Machine)
@@ -260,7 +265,7 @@ public sealed class DevEnv(Installed installed)
             if (File.Exists(npmrc))
                 foreach (var line in File.ReadLines(npmrc))
                     if (line.Trim().StartsWith("prefix", StringComparison.OrdinalIgnoreCase) && line.Contains('='))
-                        roots.Add((Path.Combine(Environment.ExpandEnvironmentVariables(line[(line.IndexOf('=') + 1)..].Trim()), "node_modules"), "npm (prefix из .npmrc)"));
+                        roots.Add((Path.Combine(Environment.ExpandEnvironmentVariables(line[(line.IndexOf('=') + 1)..].Trim()), "node_modules"), L.T("npm (prefix из .npmrc)")));
         }
         catch (Exception) { }
 
@@ -269,7 +274,7 @@ public sealed class DevEnv(Installed installed)
                   ?? Path.Combine(Roaming, "nvm");
         foreach (var d in Dirs(nvm).Where(d => Path.GetFileName(d).StartsWith('v')))
             roots.Add((Path.Combine(d, "node_modules"), "Node " + Path.GetFileName(d)));
-        roots.Add((Path.Combine(Pf, "nodejs", "node_modules"), "Node (установщик)"));
+        roots.Add((Path.Combine(Pf, "nodejs", "node_modules"), L.T("Node (установщик)")));
         foreach (var d in Dirs(Path.Combine(Local, "pnpm", "global")))
             roots.Add((Path.Combine(d, "node_modules"), "pnpm"));
         roots.Add((Path.Combine(Local, "Yarn", "Data", "global", "node_modules"), "yarn"));
@@ -301,7 +306,7 @@ public sealed class DevEnv(Installed installed)
             }
             catch (Exception) { }
             bool bundled = name is "npm" or "corepack";
-            return new DevItem(name, v, dir, DirSize(dir), null, null, bundled ? where + ", входит в Node" : where, null);
+            return new DevItem(name, v, dir, DirSize(dir), null, null, bundled ? L.T("{0}, входит в Node", where) : where, null);
         }
     }
 
@@ -322,7 +327,7 @@ public sealed class DevEnv(Installed installed)
             var (s, u) = ByDate(PythonEol.TryGetValue(mm, out var d) ? d : null);
             int pkgs = Dirs(Path.Combine(dir, "Lib", "site-packages")).Count(p => p.EndsWith(".dist-info", StringComparison.OrdinalIgnoreCase));
             list.Add(new DevItem("Python", v, dir, DirSize(dir), s, u,
-                $"{source}{(pkgs > 0 ? $", пакетов: {pkgs}" : "")}",
+                pkgs > 0 ? L.T("{0}, пакетов: {1}", source, pkgs) : source,
                 Match(programs, p => p.Name.StartsWith("Python " + mm, StringComparison.OrdinalIgnoreCase) && !p.Name.Contains("Launcher") && (p.Version?.StartsWith(v) ?? true))));
         }
 
@@ -335,17 +340,17 @@ public sealed class DevEnv(Installed installed)
                 foreach (var tag in core.GetSubKeyNames())
                 {
                     using var ip = core.OpenSubKey(tag + @"\InstallPath");
-                    if (ip?.GetValue("") is string dir) AddPy(dir, ip.GetValue("Version") as string ?? FileVersion(Path.Combine(dir, "python.exe")), "установщик");
+                    if (ip?.GetValue("") is string dir) AddPy(dir, ip.GetValue("Version") as string ?? FileVersion(Path.Combine(dir, "python.exe")), L.T("установщик"));
                 }
             }
         }
 
-        foreach (var d in Dirs(Path.Combine(Local, "Programs", "Python"))) AddPy(d, null, "установщик");
+        foreach (var d in Dirs(Path.Combine(Local, "Programs", "Python"))) AddPy(d, null, L.T("установщик"));
         foreach (var name in new[] { "anaconda3", "miniconda3", "Anaconda3", "Miniconda3" })
         {
             var d = Path.Combine(Home, name);
             AddPy(d, null, "Conda");
-            foreach (var env in Dirs(Path.Combine(d, "envs"))) AddPy(env, null, $"Conda, окружение {Path.GetFileName(env)}");
+            foreach (var env in Dirs(Path.Combine(d, "envs"))) AddPy(env, null, L.T("Conda, окружение {0}", Path.GetFileName(env)));
         }
         foreach (var d in Dirs(Path.Combine(Home, ".pyenv", "pyenv-win", "versions"))) AddPy(d, Path.GetFileName(d), "pyenv");
         foreach (var d in Dirs(Path.Combine(Roaming, "uv", "python"))) AddPy(d, null, "uv");
@@ -391,7 +396,7 @@ public sealed class DevEnv(Installed installed)
 
             int major = v.StartsWith("1.") ? int.TryParse(v.Split('.')[1], out var m1) ? m1 : 0 : int.TryParse(v.Split('.')[0], out var m2) ? m2 : 0;
             bool jdk = File.Exists(Path.Combine(dir, "bin", "javac.exe"));
-            string? note = string.Join(", ", new[] { vendor, jdk ? null : "только JRE", dir.Contains("Android Studio") ? "встроен в Android Studio" : null }.Where(x => !string.IsNullOrEmpty(x)));
+            string? note = string.Join(", ", new[] { vendor, jdk ? null : L.T("только JRE"), dir.Contains("Android Studio") ? L.T("встроен в Android Studio") : null }.Where(x => !string.IsNullOrEmpty(x)));
             list.Add(new DevItem(jdk ? "JDK" : "JRE", v, dir, DirSize(dir),
                 major == 0 ? null : JavaLts.Contains(major) ? "lts" : "eol", null, note.Length > 0 ? note : null,
                 Match(programs, p => (p.Name.Contains("JDK") || p.Name.Contains("Java") || p.Name.Contains("OpenJDK")) && (p.Version?.StartsWith(v.Split('+')[0]) ?? false))));
@@ -411,17 +416,17 @@ public sealed class DevEnv(Installed installed)
         if (!Directory.Exists(root)) return list;
 
         foreach (var d in Dirs(Path.Combine(root, "platforms")).OrderByDescending(VersionKey))
-            list.Add(new DevItem("Платформа", Path.GetFileName(d), d, DirSize(d), null, null, null, null));
+            list.Add(new DevItem(L.T("Платформа"), Path.GetFileName(d), d, DirSize(d), null, null, null, null));
         foreach (var d in Dirs(Path.Combine(root, "build-tools")).OrderByDescending(VersionKey))
             list.Add(new DevItem("Build-tools", Path.GetFileName(d), d, DirSize(d), null, null, null, null));
         foreach (var d in Dirs(Path.Combine(root, "ndk")).OrderByDescending(VersionKey))
             list.Add(new DevItem("NDK", Path.GetFileName(d), d, DirSize(d), null, null, null, null));
         foreach (var d in Dirs(Path.Combine(root, "system-images")))
-            list.Add(new DevItem("Образы эмулятора", Path.GetFileName(d), d, DirSize(d), null, null, null, null));
+            list.Add(new DevItem(L.T("Образы эмулятора"), Path.GetFileName(d), d, DirSize(d), null, null, null, null));
 
         var avd = Path.Combine(Home, ".android", "avd");
         foreach (var d in Dirs(avd).Where(d => d.EndsWith(".avd")))
-            list.Add(new DevItem("Эмулятор (AVD)", Path.GetFileNameWithoutExtension(d), d, DirSize(d), null, null, null, null));
+            list.Add(new DevItem(L.T("Эмулятор (AVD)"), Path.GetFileNameWithoutExtension(d), d, DirSize(d), null, null, null, null));
         return list;
     }
 
@@ -441,14 +446,14 @@ public sealed class DevEnv(Installed installed)
             list.Add(new DevItem("Rust", Path.GetFileName(d), d, DirSize(d), null, null, "rustup", null));
 
         var cargo = Path.Combine(Home, ".cargo", "registry");
-        if (Directory.Exists(cargo)) list.Add(new DevItem("Кэш Cargo", "", cargo, DirSize(cargo), null, null, "Можно очистить: cargo cache -a", null));
+        if (Directory.Exists(cargo)) list.Add(new DevItem(L.T("Кэш Cargo"), "", cargo, DirSize(cargo), null, null, L.T("Можно очистить: cargo cache -a"), null));
 
         foreach (var exe in new[] { Path.Combine(Pf, "PowerShell", "7", "pwsh.exe"), Path.Combine(Pf, "PowerShell", "7-preview", "pwsh.exe") })
             if (File.Exists(exe)) list.Add(new DevItem("PowerShell", FileVersion(exe) ?? "", Path.GetDirectoryName(exe), null, null, null, null,
                 Match(programs, p => p.Name.StartsWith("PowerShell 7", StringComparison.OrdinalIgnoreCase))));
 
         foreach (var d in Dirs(Path.Combine(Pf, "PostgreSQL")))
-            list.Add(new DevItem("PostgreSQL", Path.GetFileName(d), d, DirSize(Path.Combine(d, "bin")), null, null, "Данные баз — в папке data", Match(programs, p => p.Name.StartsWith("PostgreSQL " + Path.GetFileName(d)))));
+            list.Add(new DevItem("PostgreSQL", Path.GetFileName(d), d, DirSize(Path.Combine(d, "bin")), null, null, L.T("Данные баз — в папке data"), Match(programs, p => p.Name.StartsWith("PostgreSQL " + Path.GetFileName(d)))));
 
         foreach (var p in programs.Where(p => p.Name.StartsWith("Microsoft SQL Server 20", StringComparison.OrdinalIgnoreCase) && !p.Name.Contains("Setup")))
             list.Add(new DevItem("SQL Server", p.Version ?? "", p.Location, null, null, null, p.Name, p.Id));
@@ -474,7 +479,7 @@ public sealed class DevEnv(Installed installed)
                     var name = e.TryGetProperty("displayName", out var dn) ? dn.GetString() ?? "Visual Studio" : "Visual Studio";
                     var ver = e.TryGetProperty("catalog", out var cat) && cat.TryGetProperty("productDisplayVersion", out var pv) ? pv.GetString() : e.GetProperty("installationVersion").GetString();
                     var path = e.TryGetProperty("installationPath", out var ip) ? ip.GetString() : null;
-                    list.Add(new DevItem(name, ver ?? "", path, null, null, null, "Компоненты меняются в Visual Studio Installer", null));
+                    list.Add(new DevItem(name, ver ?? "", path, null, null, null, L.T("Компоненты меняются в Visual Studio Installer"), null));
                 }
             }
             catch (Exception) { }
@@ -485,7 +490,7 @@ public sealed class DevEnv(Installed installed)
             if (!File.Exists(exe)) continue;
             int ext = Dirs(Path.Combine(Home, ".vscode", "extensions")).Count(d => !Path.GetFileName(d).StartsWith('.'));
             list.Add(new DevItem("Visual Studio Code", FileVersion(exe) ?? "", Path.GetDirectoryName(exe), null, null, null,
-                ext > 0 ? $"расширений: {ext}" : null, Match(programs, p => p.Name.StartsWith("Microsoft Visual Studio Code", StringComparison.OrdinalIgnoreCase))));
+                ext > 0 ? L.T("расширений: {0}", ext) : null, Match(programs, p => p.Name.StartsWith("Microsoft Visual Studio Code", StringComparison.OrdinalIgnoreCase))));
         }
 
         foreach (var p in programs.Where(p =>
@@ -496,7 +501,7 @@ public sealed class DevEnv(Installed installed)
                      p.Name.StartsWith("SQL Server Management Studio", StringComparison.OrdinalIgnoreCase) || p.Name.StartsWith("Postman", StringComparison.OrdinalIgnoreCase) ||
                      p.Name.StartsWith("DBeaver", StringComparison.OrdinalIgnoreCase) || p.Name.StartsWith("pgAdmin", StringComparison.OrdinalIgnoreCase)))
             list.Add(new DevItem(p.Name, p.Version ?? "", p.Location, p.Size > 0 ? p.Size : null, null, null,
-                p.LastUsed is { } lu ? $"последний запуск {DateTimeOffset.FromUnixTimeSeconds(lu).LocalDateTime:d MMM yyyy}" : null, p.Id));
+                p.LastUsed is { } lu ? L.T("последний запуск {0}", DateTimeOffset.FromUnixTimeSeconds(lu).LocalDateTime.ToString("d MMM yyyy", L.Culture)) : null, p.Id));
         return list;
     }
 
@@ -518,7 +523,7 @@ public sealed class DevEnv(Installed installed)
             var year = Regex.Match(p.Name, @"20\d\d").Value;
             bool old = int.TryParse(year, out var y) && y < 2015;
             list.Add(new DevItem(p.Name.Replace("Microsoft ", ""), p.Version ?? "", null, null, old ? "eol" : "ok", null,
-                "Нужны программам, собранным этой версией. Удалять не стоит, даже старые", null));
+                L.T("Нужны программам, собранным этой версией. Удалять не стоит, даже старые"), null));
         }
         return list;
     }
@@ -540,7 +545,7 @@ public sealed class DevEnv(Installed installed)
                     var vhd = basePath is null ? null : Directory.Exists(basePath) ? Directory.EnumerateFiles(basePath, "*.vhdx").FirstOrDefault() : null;
                     int ver = d.GetValue("Version") is int v ? v : 2;
                     list.Add(new DevItem("WSL: " + name, $"WSL {ver}", basePath, vhd is null ? null : new FileInfo(vhd).Length, null, null,
-                        vhd is null ? null : "размер файла-диска", null));
+                        vhd is null ? null : L.T("размер файла-диска"), null));
                 }
             }
         }
@@ -550,7 +555,7 @@ public sealed class DevEnv(Installed installed)
         {
             var vhd = new[] { Path.Combine(Local, "Docker", "wsl", "disk", "docker_data.vhdx"), Path.Combine(Local, "Docker", "wsl", "data", "ext4.vhdx") }.FirstOrDefault(File.Exists);
             list.Add(new DevItem("Docker Desktop", FileVersion(dockerExe) ?? "", Path.GetDirectoryName(dockerExe), vhd is null ? null : new FileInfo(vhd).Length, null, null,
-                vhd is null ? null : "размер диска с образами и томами", Match(programs, p => p.Name.StartsWith("Docker Desktop", StringComparison.OrdinalIgnoreCase))));
+                vhd is null ? null : L.T("размер диска с образами и томами"), Match(programs, p => p.Name.StartsWith("Docker Desktop", StringComparison.OrdinalIgnoreCase))));
         }
         return list;
     }
@@ -576,13 +581,13 @@ public sealed class DevEnv(Installed installed)
     {
         var list = new List<DevItem>();
         var winget = Path.Combine(Local, "Microsoft", "WindowsApps", "winget.exe");
-        if (File.Exists(winget)) list.Add(new DevItem("winget", "", winget, null, null, null, "Обновить всё: winget upgrade --all", null));
+        if (File.Exists(winget)) list.Add(new DevItem("winget", "", winget, null, null, null, L.T("Обновить всё: winget upgrade --all"), null));
 
         var choco = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "chocolatey");
         if (Directory.Exists(choco))
         {
             int n = Dirs(Path.Combine(choco, "lib")).Count();
-            list.Add(new DevItem("Chocolatey", "", choco, DirSize(Path.Combine(choco, "lib")), null, null, $"пакетов: {n}. Обновить: choco upgrade all", null));
+            list.Add(new DevItem("Chocolatey", "", choco, DirSize(Path.Combine(choco, "lib")), null, null, L.T("пакетов: {0}. Обновить: choco upgrade all", n), null));
         }
 
         var scoop = Environment.GetEnvironmentVariable("SCOOP", EnvironmentVariableTarget.User) ?? Path.Combine(Home, "scoop");
@@ -590,19 +595,19 @@ public sealed class DevEnv(Installed installed)
         {
             var apps = Dirs(Path.Combine(scoop, "apps")).Select(Path.GetFileName).Where(n => n != "scoop").ToList();
             list.Add(new DevItem("Scoop", "", scoop, DirSize(Path.Combine(scoop, "apps")), null, null,
-                $"пакетов: {apps.Count}" + (apps.Count > 0 ? $" — {string.Join(", ", apps.Take(12))}{(apps.Count > 12 ? "…" : "")}" : ""), null));
+                apps.Count > 0 ? L.T("пакетов: {0} — {1}", apps.Count, string.Join(", ", apps.Take(12)) + (apps.Count > 12 ? "…" : "")) : L.T("пакетов: {0}", apps.Count), null));
         }
 
         foreach (var (name, dir, how) in new[]
                  {
-                     ("Кэш NuGet", Path.Combine(Home, ".nuget", "packages"), "dotnet nuget locals all --clear"),
-                     ("Кэш npm", Path.Combine(Local, "npm-cache"), "npm cache clean --force"),
-                     ("Кэш pip", Path.Combine(Local, "pip", "Cache"), "pip cache purge"),
-                     ("Кэш Gradle", Path.Combine(Home, ".gradle", "caches"), "удалить папку при закрытой IDE"),
-                     ("Репозиторий Maven", Path.Combine(Home, ".m2", "repository"), "удалить папку — скачается заново"),
+                     (L.T("Кэш NuGet"), Path.Combine(Home, ".nuget", "packages"), "dotnet nuget locals all --clear"),
+                     (L.T("Кэш npm"), Path.Combine(Local, "npm-cache"), "npm cache clean --force"),
+                     (L.T("Кэш pip"), Path.Combine(Local, "pip", "Cache"), "pip cache purge"),
+                     (L.T("Кэш Gradle"), Path.Combine(Home, ".gradle", "caches"), L.T("удалить папку при закрытой IDE")),
+                     (L.T("Репозиторий Maven"), Path.Combine(Home, ".m2", "repository"), L.T("удалить папку — скачается заново")),
                  })
         {
-            if (Directory.Exists(dir)) list.Add(new DevItem(name, "", dir, DirSize(dir), null, null, "Очистка: " + how, null));
+            if (Directory.Exists(dir)) list.Add(new DevItem(name, "", dir, DirSize(dir), null, null, L.T("Очистка: {0}", how), null));
         }
         return list;
     }
@@ -642,7 +647,7 @@ public sealed class DevEnv(Installed installed)
     public ActionResult ServiceAction(string name, string action)
     {
         if (!ServicePattern.IsMatch(name) || name.Any(c => !(char.IsLetterOrDigit(c) || c is '$' or '_' or '-' or '.')))
-            return new(false, "Эта служба не из списка служб разработчика.");
+            return new(false, L.T("Эта служба не из списка служб разработчика."));
 
         string args = action switch
         {
@@ -653,14 +658,14 @@ public sealed class DevEnv(Installed installed)
             "disabled" => $"config \"{name}\" start= disabled",
             _ => "",
         };
-        if (args.Length == 0) return new(false, "Неизвестное действие.");
+        if (args.Length == 0) return new(false, L.T("Неизвестное действие."));
 
         var output = Run("sc.exe", args, out int code);
         // sc start/stop возвращает сразу, служба доходит до нужного состояния за несколько секунд.
         lock (_gate) _data = _data is null ? null : _data with { Services = TryServices() };
         return code == 0
-            ? new(true, action switch { "start" => "Служба запускается.", "stop" => "Служба останавливается.", _ => "Тип запуска изменён." })
-            : new(false, (output ?? "").Trim().Split('\n').LastOrDefault(l => l.Trim().Length > 0)?.Trim() ?? $"Ошибка {code}");
+            ? new(true, action switch { "start" => L.T("Служба запускается."), "stop" => L.T("Служба останавливается."), _ => L.T("Тип запуска изменён.") })
+            : new(false, (output ?? "").Trim().Split('\n').LastOrDefault(l => l.Trim().Length > 0)?.Trim() ?? L.T("Ошибка {0}", code));
     }
 
     /// <summary>Действие с Docker; после него перечитываем только Docker, а не всё окружение.</summary>
@@ -730,9 +735,9 @@ public sealed class DevEnv(Installed installed)
             string? note = null;
             var first = hits[0];
             if (first.Contains(@"\WindowsApps\", StringComparison.OrdinalIgnoreCase) && c.StartsWith("python"))
-                note = "Это заглушка Microsoft Store, а не Python: она откроет Store. Отключите её в «Параметры → Приложения → Псевдонимы выполнения» или поставьте нужный Python выше в PATH.";
+                note = L.T("Это заглушка Microsoft Store, а не Python: она откроет Store. Отключите её в «Параметры → Приложения → Псевдонимы выполнения» или поставьте нужный Python выше в PATH.");
             else if (hits.Count > 1)
-                note = $"Найдено копий: {hits.Count}. Запускается первая, остальные заслонены.";
+                note = L.T("Найдено копий: {0}. Запускается первая, остальные заслонены.", hits.Count);
             commands.Add(new CommandResolution(c, first, FileVersion(first), hits.Skip(1).ToList(), note));
         }
 

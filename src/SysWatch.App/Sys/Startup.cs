@@ -20,9 +20,9 @@ public sealed class Startup(Signatures signatures)
 
     private static readonly Source[] RunSources =
     [
-        new(Registry.CurrentUser, "HKCU", @"Software\Microsoft\Windows\CurrentVersion\Run", "Run", "Для этого пользователя"),
-        new(Registry.LocalMachine, "HKLM", @"Software\Microsoft\Windows\CurrentVersion\Run", "Run", "Для всех пользователей"),
-        new(Registry.LocalMachine, "HKLM", @"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Run", "Run32", "Для всех пользователей (32-бит)"),
+        new(Registry.CurrentUser, "HKCU", @"Software\Microsoft\Windows\CurrentVersion\Run", "Run", L.K("Для этого пользователя")),
+        new(Registry.LocalMachine, "HKLM", @"Software\Microsoft\Windows\CurrentVersion\Run", "Run", L.K("Для всех пользователей")),
+        new(Registry.LocalMachine, "HKLM", @"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Run", "Run32", L.K("Для всех пользователей (32-бит)")),
     ];
 
     public List<StartupItem> List()
@@ -38,7 +38,7 @@ public sealed class Startup(Signatures signatures)
                 var cmd = run.GetValue(name)?.ToString() ?? "";
                 var path = ExeOf(cmd);
                 var (sig, signer) = signatures.Check(path);
-                list.Add(new StartupItem($"run|{src.HiveName}|{src.ApprovedSub}|{name}", name, src.Where, cmd, path,
+                list.Add(new StartupItem($"run|{src.HiveName}|{src.ApprovedSub}|{name}", name, L.T(src.Where), cmd, path,
                     IsEnabled(src.Hive, src.ApprovedSub, name), sig, signer, true));
             }
         }
@@ -55,7 +55,7 @@ public sealed class Startup(Signatures signatures)
                 var (sig, signer) = signatures.Check(target);
                 list.Add(new StartupItem($"folder|{(hive == Registry.CurrentUser ? "HKCU" : "HKLM")}|StartupFolder|{file}",
                     System.IO.Path.GetFileNameWithoutExtension(file),
-                    hive == Registry.CurrentUser ? "Папка «Автозагрузка»" : "Общая папка «Автозагрузка»",
+                    hive == Registry.CurrentUser ? L.T("Папка «Автозагрузка»") : L.T("Общая папка «Автозагрузка»"),
                     target ?? f, target, IsEnabled(hive, "StartupFolder", file), sig, signer, true));
             }
         }

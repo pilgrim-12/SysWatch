@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Plot } from './Plot';
 import { COLOR, bytes, pct, plural, rate } from '../format';
 import type { Live } from '../api';
+import { t } from '../i18n';
 
 export interface LiveHistory {
   ts: number[];
@@ -59,16 +60,16 @@ export function Scopes({ live, hist }: { live: Live | null; hist: LiveHistory })
   const peak = (a: number[]) => Math.max(0, ...a);
   return (
     <div className="scopes">
-      <Scope name="Процессор" color={COLOR.cpu} ts={hist.ts} values={hist.cpu} yMax={100}
+      <Scope name={t('Процессор')} color={COLOR.cpu} ts={hist.ts} values={hist.cpu} yMax={100}
         value={live ? pct(live.cpu, 0) : '—'}
         sub={live ? plural(live.apps.reduce((s, a) => s + a.count, 0), 'процесс', 'процесса', 'процессов') : ''} />
-      <Scope name="Память" color={COLOR.mem} ts={hist.ts} values={hist.mem} yMax={100}
+      <Scope name={t('Память')} color={COLOR.mem} ts={hist.ts} values={hist.mem} yMax={100}
         value={live ? pct((live.memUsed / live.memTotal) * 100, 0) : '—'}
-        sub={live ? `${bytes(live.memUsed)} из ${bytes(live.memTotal)}` : ''} />
-      <Scope name="Диск" color={COLOR.disk} ts={hist.ts} values={hist.disk}
+        sub={live ? t('{0} из {1}', bytes(live.memUsed), bytes(live.memTotal)) : ''} />
+      <Scope name={t('Диск')} color={COLOR.disk} ts={hist.ts} values={hist.disk}
         value={live ? rate(live.diskRead + live.diskWrite) : '—'}
-        sub={live ? `пик за 2 мин ${rate(peak(hist.disk))}` : ''} />
-      <Scope name="Сеть" color={COLOR.net} ts={hist.ts} values={hist.net}
+        sub={live ? t('пик за 2 мин {0}', rate(peak(hist.disk))) : ''} />
+      <Scope name={t('Сеть')} color={COLOR.net} ts={hist.ts} values={hist.net}
         value={live ? rate(live.netRx + live.netTx) : '—'}
         sub={live ? `↓ ${rate(live.netRx)}  ↑ ${rate(live.netTx)}` : ''} />
     </div>

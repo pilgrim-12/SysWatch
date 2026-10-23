@@ -19,40 +19,40 @@ public static class Crashes
     private static readonly Rule[] Rules =
     [
         new("System", "Microsoft-Windows-WER-SystemErrorReporting", [1001], "bsod",
-            (e, d) => ("Синий экран (BSOD)", $"Код остановки {First(d, "param1") ?? Desc(e)}. Дамп памяти: {First(d, "param2") ?? "не сохранён"}", null)),
+            (e, d) => (L.T("Синий экран (BSOD)"), L.T("Код остановки {0}. Дамп памяти: {1}", First(d, "param1") ?? Desc(e), First(d, "param2") ?? L.T("не сохранён")), null)),
         new("System", "Microsoft-Windows-Kernel-Power", [41], "power",
-            (e, d) => ("Внезапное выключение",
+            (e, d) => (L.T("Внезапное выключение"),
                 long.TryParse(d.GetValueOrDefault("BugcheckCode"), out var bc) && bc != 0
-                    ? $"Компьютер перезагрузился после синего экрана (код 0x{bc:X})."
-                    : "Компьютер выключился без завершения работы: пропало питание, зависание или удерживали кнопку питания.", null)),
+                    ? L.T("Компьютер перезагрузился после синего экрана (код 0x{0:X}).", bc)
+                    : L.T("Компьютер выключился без завершения работы: пропало питание, зависание или удерживали кнопку питания."), null)),
         new("System", "EventLog", [6008], "power",
-            (e, d) => ("Предыдущее выключение было неожиданным", Desc(e), null)),
+            (e, d) => (L.T("Предыдущее выключение было неожиданным"), Desc(e), null)),
         new("System", "Display", [4101], "gpu",
-            (e, d) => ("Видеодрайвер перестал отвечать и был восстановлен", "Экран мог погаснуть на пару секунд. Частая причина — перегрев, разгон или нестабильный драйвер.", null)),
+            (e, d) => (L.T("Видеодрайвер перестал отвечать и был восстановлен"), L.T("Экран мог погаснуть на пару секунд. Частая причина — перегрев, разгон или нестабильный драйвер."), null)),
         new("System", "nvlddmkm", [13, 14, 153, 4101], "gpu",
-            (e, d) => ("Ошибка драйвера NVIDIA", Desc(e), null)),
+            (e, d) => (L.T("Ошибка драйвера NVIDIA"), Desc(e), null)),
         new("System", "amdkmdag", [4101, 4097, 4098, 4119], "gpu",
-            (e, d) => ("Ошибка драйвера AMD", Desc(e), null)),
+            (e, d) => (L.T("Ошибка драйвера AMD"), Desc(e), null)),
         new("System", "igfx", [4101], "gpu",
-            (e, d) => ("Ошибка драйвера Intel Graphics", Desc(e), null)),
+            (e, d) => (L.T("Ошибка драйвера Intel Graphics"), Desc(e), null)),
         new("System", "Microsoft-Windows-WHEA-Logger", [1, 17, 18, 19, 20, 46, 47], "hardware",
-            (e, d) => ("Аппаратная ошибка (WHEA)", Desc(e), null)),
+            (e, d) => (L.T("Аппаратная ошибка (WHEA)"), Desc(e), null)),
         new("System", "disk", [7, 11, 51, 153], "disk",
-            (e, d) => ("Ошибка диска", Desc(e), null)),
+            (e, d) => (L.T("Ошибка диска"), Desc(e), null)),
         new("System", "Ntfs", [55, 98, 137], "disk",
-            (e, d) => ("Ошибка файловой системы", Desc(e), null)),
+            (e, d) => (L.T("Ошибка файловой системы"), Desc(e), null)),
         new("System", "Microsoft-Windows-Ntfs", [55, 98, 137], "disk",
-            (e, d) => ("Ошибка файловой системы", Desc(e), null)),
+            (e, d) => (L.T("Ошибка файловой системы"), Desc(e), null)),
         new("System", "Microsoft-Windows-WindowsUpdateClient", [20], "update",
-            (e, d) => ("Обновление Windows не установилось", First(d, "updateTitle") ?? Desc(e), null)),
+            (e, d) => (L.T("Обновление Windows не установилось"), First(d, "updateTitle") ?? Desc(e), null)),
         new("Application", "Application Error", [1000], "app",
-            (e, d) => ("Программа аварийно завершилась", $"Модуль: {d.GetValueOrDefault("param4") ?? "?"}, код 0x{(d.GetValueOrDefault("param7") ?? "").TrimStart('0', 'x')}", d.GetValueOrDefault("param1"))),
+            (e, d) => (L.T("Программа аварийно завершилась"), L.T("Модуль: {0}, код 0x{1}", d.GetValueOrDefault("param4") ?? "?", (d.GetValueOrDefault("param7") ?? "").TrimStart('0', 'x')), d.GetValueOrDefault("param1"))),
         new("Application", "Application Hang", [1002], "hang",
-            (e, d) => ("Программа зависла и была закрыта", "Окно не отвечало, Windows завершило программу.", d.GetValueOrDefault("param1") ?? First(d, "Data0"))),
+            (e, d) => (L.T("Программа зависла и была закрыта"), L.T("Окно не отвечало, Windows завершило программу."), d.GetValueOrDefault("param1") ?? First(d, "Data0"))),
         new("Application", ".NET Runtime", [1026], "app",
-            (e, d) => ("Программа .NET упала с необработанной ошибкой", Shorten(Desc(e), 400), AppFromDotnet(Desc(e)))),
+            (e, d) => (L.T("Программа .NET упала с необработанной ошибкой"), Shorten(Desc(e), 400), AppFromDotnet(Desc(e)))),
         new("Application", "Windows Error Reporting", [1001], "gpu",
-            (e, d) => ("Сбой видеодрайвера (LiveKernelEvent)", "Windows сохранила отчёт о сбросе видеокарты.", null)),
+            (e, d) => (L.T("Сбой видеодрайвера (LiveKernelEvent)"), L.T("Windows сохранила отчёт о сбросе видеокарты."), null)),
     ];
 
     public static CrashList List(int days)
@@ -97,8 +97,8 @@ public static class Crashes
                         if (lkeCode is not null && lkeCode is not ("141" or "117"))
                         {
                             kind = "hardware";
-                            title = $"Сбой драйвера (LiveKernelEvent {lkeCode})";
-                            detail = "Windows восстановила драйвер устройства и сохранила отчёт.";
+                            title = L.T("Сбой драйвера (LiveKernelEvent {0})", lkeCode);
+                            detail = L.T("Windows восстановила драйвер устройства и сохранила отчёт.");
                         }
                         items.Add(new Crash(ts, kind, title, Shorten(detail, 500), app, e.ProviderName ?? rule.Provider, e.Id));
                     }
@@ -144,7 +144,7 @@ public static class Crashes
     private static string Desc(EventRecord e)
     {
         try { return (e.FormatDescription() ?? "").Trim(); }
-        catch (Exception) { return $"Событие {e.Id} от {e.ProviderName}"; }
+        catch (Exception) { return L.T("Событие {0} от {1}", e.Id, e.ProviderName); }
     }
 
     private static string Shorten(string s, int max)

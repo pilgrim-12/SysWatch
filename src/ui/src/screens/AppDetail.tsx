@@ -3,13 +3,14 @@ import { api, type AppDetail as Detail } from '../api';
 import { useLoad } from '../hooks';
 import { COLOR, RANGES, appLabel, bytes, dayTime, pct } from '../format';
 import { Plot } from '../components/Plot';
+import { t } from '../i18n';
 
 function Signature({ d }: { d: Detail }) {
   switch (d.signature) {
-    case 'signed': return <span className="tag good" title="Цифровая подпись exe-файла">подписан: {d.signer}</span>;
-    case 'system': return <span className="tag good">системный файл Windows</span>;
-    case 'unsigned': return <span className="tag bad" title="У exe-файла нет цифровой подписи">без подписи</span>;
-    default: return <span className="tag">подпись не проверена</span>;
+    case 'signed': return <span className="tag good" title={t('Цифровая подпись exe-файла')}>{t('подписан: {0}', d.signer)}</span>;
+    case 'system': return <span className="tag good">{t('системный файл Windows')}</span>;
+    case 'unsigned': return <span className="tag bad" title={t('У exe-файла нет цифровой подписи')}>{t('без подписи')}</span>;
+    default: return <span className="tag">{t('подпись не проверена')}</span>;
   }
 }
 
@@ -24,13 +25,13 @@ export function AppDetail({ name, range, setRange, onBack }: { name: string; ran
     if (!d) return null;
     const s = d.series;
     return {
-      cpu: [{ label: 'Процессор', color: COLOR.cpu, values: s.cpu, fill: true }],
-      mem: [{ label: 'Память', color: COLOR.mem, values: s.mem, fill: true }],
+      cpu: [{ label: t('Процессор'), color: COLOR.cpu, values: s.cpu, fill: true }],
+      mem: [{ label: t('Память'), color: COLOR.mem, values: s.mem, fill: true }],
       net: [
-        { label: 'Получено', color: COLOR.net, values: s.netRx, fill: true },
-        { label: 'Отправлено', color: COLOR.netTx, values: s.netTx },
+        { label: t('Получено'), color: COLOR.net, values: s.netRx, fill: true },
+        { label: t('Отправлено'), color: COLOR.netTx, values: s.netTx },
       ],
-      io: [{ label: 'Диск', color: COLOR.disk, values: s.io, fill: true }],
+      io: [{ label: t('Диск'), color: COLOR.disk, values: s.io, fill: true }],
     };
   }, [d]);
 
@@ -45,18 +46,18 @@ export function AppDetail({ name, range, setRange, onBack }: { name: string; ran
 
   return (
     <>
-      <button className="back" onClick={onBack}>Назад</button>
+      <button className="back" onClick={onBack}>{t('Назад')}</button>
 
       <div className="app-head">
         <div className="app-icon">{appLabel(name).slice(0, 1).toUpperCase()}</div>
         <div style={{ minWidth: 0 }}>
           <h1>{appLabel(name)}</h1>
-          <div className="path">{d?.path ?? (app.loading ? 'Загружаю…' : 'Путь к файлу неизвестен')}</div>
-          {fw.data && <div style={{ marginTop: 6 }}><span className="tag bad">выход в сеть запрещён</span></div>}
-          {d && <div style={{ marginTop: 8, display: 'flex', gap: 8 }}><Signature d={d} /><span className="tag">{live} запущено, {d.processes.length} за период</span></div>}
+          <div className="path">{d?.path ?? (app.loading ? t('Загружаю…') : t('Путь к файлу неизвестен'))}</div>
+          {fw.data && <div style={{ marginTop: 6 }}><span className="tag bad">{t('выход в сеть запрещён')}</span></div>}
+          {d && <div style={{ marginTop: 8, display: 'flex', gap: 8 }}><Signature d={d} /><span className="tag">{t('{0} запущено, {1} за период', live, d.processes.length)}</span></div>}
         </div>
         <div className="head-tools">
-          <div className="seg" role="group" aria-label="Период">
+          <div className="seg" role="group" aria-label={t('Период')}>
             {RANGES.map(r => (
               <button key={r.minutes} aria-pressed={range === r.minutes} onClick={() => setRange(r.minutes)}>{r.label}</button>
             ))}
@@ -65,55 +66,55 @@ export function AppDetail({ name, range, setRange, onBack }: { name: string; ran
       </div>
 
       <div className="actions">
-        {d?.path && <button className="btn" onClick={() => act(() => api.reveal(d.path!))}>Показать файл</button>}
+        {d?.path && <button className="btn" onClick={() => act(() => api.reveal(d.path!))}>{t('Показать файл')}</button>}
         {d?.path && (fw.data
-          ? <button className="btn" onClick={() => act(() => api.unblock(d.path!)).then(fw.reload)}>Разрешить сеть</button>
-          : <button className="btn" onClick={() => act(() => api.block(d.path!)).then(fw.reload)} title="Правило Брандмауэра Windows: программа не сможет ни подключаться, ни принимать подключения">Запретить сеть</button>)}
-        <button className="btn" disabled={!live} onClick={() => act(() => api.priority(name, 'low'))} title="Программа будет уступать процессор всем остальным">Понизить приоритет</button>
-        <button className="btn" disabled={!live} onClick={() => act(() => api.priority(name, 'normal'))}>Обычный приоритет</button>
+          ? <button className="btn" onClick={() => act(() => api.unblock(d.path!)).then(fw.reload)}>{t('Разрешить сеть')}</button>
+          : <button className="btn" onClick={() => act(() => api.block(d.path!)).then(fw.reload)} title={t('Правило Брандмауэра Windows: программа не сможет ни подключаться, ни принимать подключения')}>{t('Запретить сеть')}</button>)}
+        <button className="btn" disabled={!live} onClick={() => act(() => api.priority(name, 'low'))} title={t('Программа будет уступать процессор всем остальным')}>{t('Понизить приоритет')}</button>
+        <button className="btn" disabled={!live} onClick={() => act(() => api.priority(name, 'normal'))}>{t('Обычный приоритет')}</button>
         {confirmKill ? (
           <span className="confirm">
-            <span>Завершить все процессы {name}? Несохранённые данные пропадут.</span>
-            <button className="btn danger" onClick={() => { setConfirmKill(false); act(() => api.kill(name)); }}>Завершить</button>
-            <button className="btn" onClick={() => setConfirmKill(false)}>Отмена</button>
+            <span>{t('Завершить все процессы {0}? Несохранённые данные пропадут.', name)}</span>
+            <button className="btn danger" onClick={() => { setConfirmKill(false); act(() => api.kill(name)); }}>{t('Завершить')}</button>
+            <button className="btn" onClick={() => setConfirmKill(false)}>{t('Отмена')}</button>
           </span>
         ) : (
-          <button className="btn" disabled={!live} onClick={() => setConfirmKill(true)}>Завершить…</button>
+          <button className="btn" disabled={!live} onClick={() => setConfirmKill(true)}>{t('Завершить…')}</button>
         )}
         {msg && <span className={msg.ok ? 'act-ok' : 'act-bad'}>{msg.text}</span>}
       </div>
 
-      {app.error && <div className="error">Не удалось загрузить программу: {app.error}</div>}
+      {app.error && <div className="error">{t('Не удалось загрузить программу: {0}', app.error)}</div>}
 
       {d && charts && d.series.ts.length > 1 ? (
         <div className="charts-4">
           <div className="panel chart-box">
-            <h3>Процессор <b style={{ color: COLOR.cpu }}>в среднем {pct(avg(d.series.cpu))}</b></h3>
+            <h3>{t('Процессор')} <b style={{ color: COLOR.cpu }}>{t('в среднем {0}', pct(avg(d.series.cpu)))}</b></h3>
             <Plot ts={d.series.ts} series={charts.cpu} height={150} yFormat={v => pct(v, 0)} />
           </div>
           <div className="panel chart-box">
-            <h3>Память <b style={{ color: COLOR.mem }}>максимум {bytes(Math.max(...d.series.mem))}</b></h3>
+            <h3>{t('Память')} <b style={{ color: COLOR.mem }}>{t('максимум {0}', bytes(Math.max(...d.series.mem)))}</b></h3>
             <Plot ts={d.series.ts} series={charts.mem} height={150} yFormat={v => bytes(v, 0)} />
           </div>
           <div className="panel chart-box">
-            <h3>Сеть, за минуту <b style={{ color: COLOR.net }}>{bytes(sum(d.series.netRx))} получено, {bytes(sum(d.series.netTx))} отправлено</b></h3>
+            <h3>{t('Сеть, за минуту')} <b style={{ color: COLOR.net }}>{t('{0} получено, {1} отправлено', bytes(sum(d.series.netRx)), bytes(sum(d.series.netTx)))}</b></h3>
             <Plot ts={d.series.ts} series={charts.net} height={150} yFormat={v => bytes(v, 0)} />
           </div>
           <div className="panel chart-box">
-            <h3>Диск, за минуту <b style={{ color: COLOR.disk }}>{bytes(sum(d.series.io))} всего</b></h3>
+            <h3>{t('Диск, за минуту')} <b style={{ color: COLOR.disk }}>{t('{0} всего', bytes(sum(d.series.io)))}</b></h3>
             <Plot ts={d.series.ts} series={charts.io} height={150} yFormat={v => bytes(v, 0)} />
           </div>
         </div>
-      ) : d && <div className="empty">За этот период программа не была активна.</div>}
+      ) : d && <div className="empty">{t('За этот период программа не была активна.')}</div>}
 
       {d && (
         <div className="grid-2-even">
           <section className="block">
-            <h2>Куда подключалась <small>{d.domains.length}</small></h2>
+            <h2>{t('Куда подключалась')} <small>{d.domains.length}</small></h2>
             <div className="panel scroll">
-              {!d.domains.length ? <div className="empty">Сетевых подключений не было.</div> : (
+              {!d.domains.length ? <div className="empty">{t('Сетевых подключений не было.')}</div> : (
                 <table className="table">
-                  <thead><tr><th>Адрес</th><th>Получено</th><th>Отправлено</th><th>Подключений</th></tr></thead>
+                  <thead><tr><th>{t('Адрес')}</th><th>{t('Получено')}</th><th>{t('Отправлено')}</th><th>{t('Подключений')}</th></tr></thead>
                   <tbody>
                     {d.domains.map(x => (
                       <tr key={x.domain}><td>{x.domain}</td><td>{bytes(x.rx)}</td><td className="dim">{bytes(x.tx)}</td><td className="dim">{x.connects}</td></tr>
@@ -125,10 +126,10 @@ export function AppDetail({ name, range, setRange, onBack }: { name: string; ran
           </section>
 
           <section className="block">
-            <h2>Процессы <small>кто запустил и с какими параметрами</small></h2>
+            <h2>{t('Процессы')} <small>{t('кто запустил и с какими параметрами')}</small></h2>
             <div className="panel scroll">
               <table className="table">
-                <thead><tr><th>PID</th><th style={{ textAlign: 'left' }}>Запустил</th><th>Старт</th><th>Статус</th></tr></thead>
+                <thead><tr><th>PID</th><th style={{ textAlign: 'left' }}>{t('Запустил')}</th><th>{t('Старт')}</th><th>{t('Статус')}</th></tr></thead>
                 <tbody>
                   {d.processes.map(p => (
                     <tr key={`${p.pid}-${p.started}`} title={p.cmdline ?? ''} style={{ cursor: 'default' }}>
@@ -138,7 +139,7 @@ export function AppDetail({ name, range, setRange, onBack }: { name: string; ran
                       </td>
                       <td className="dim" style={{ textAlign: 'left', verticalAlign: 'top' }}>{p.parent ? appLabel(p.parent) : '—'}</td>
                       <td className="dim" style={{ verticalAlign: 'top' }}>{dayTime(p.started)}</td>
-                      <td style={{ verticalAlign: 'top' }}>{p.exited ? <span className="tag">завершён</span> : <span className="tag good">работает</span>}</td>
+                      <td style={{ verticalAlign: 'top' }}>{p.exited ? <span className="tag">{t('завершён')}</span> : <span className="tag good">{t('работает')}</span>}</td>
                     </tr>
                   ))}
                 </tbody>

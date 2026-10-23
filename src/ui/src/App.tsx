@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, type Live } from './api';
 import { ago, bytes, pct } from './format';
+import { LANGS, lang, setLang, t, type Lang } from './i18n';
 import { Scopes, emptyHistory, pushLive, type LiveHistory } from './components/Scopes';
 import { BrandMark, IconAlert, IconApps, IconChip, IconDisk, IconHeat, IconLink, IconList, IconNet, IconClock, IconCode, IconGpu, IconPulse, IconReport } from './components/Icons';
 import { Now } from './screens/Now';
@@ -21,19 +22,19 @@ import { Gpu } from './screens/Gpu';
 type Screen = 'now' | 'connections' | 'timeline' | 'network' | 'anomalies' | 'disk' | 'programs' | 'system' | 'gpu' | 'report' | 'dev' | 'history' | 'events';
 
 const NAV: { key: Screen; label: string; icon: () => JSX.Element }[] = [
-  { key: 'now', label: 'Сейчас', icon: IconPulse },
-  { key: 'connections', label: 'Соединения', icon: IconLink },
-  { key: 'timeline', label: 'Таймлайн', icon: IconHeat },
-  { key: 'network', label: 'Сеть', icon: IconNet },
-  { key: 'anomalies', label: 'Аномалии', icon: IconAlert },
-  { key: 'disk', label: 'Диск', icon: IconDisk },
-  { key: 'programs', label: 'Программы', icon: IconApps },
-  { key: 'system', label: 'Система', icon: IconChip },
-  { key: 'gpu', label: 'Видеокарта', icon: IconGpu },
-  { key: 'dev', label: 'Разработка', icon: IconCode },
-  { key: 'history', label: 'История', icon: IconClock },
-  { key: 'report', label: 'Отчёт', icon: IconReport },
-  { key: 'events', label: 'События', icon: IconList },
+  { key: 'now', label: t('Сейчас'), icon: IconPulse },
+  { key: 'connections', label: t('Соединения'), icon: IconLink },
+  { key: 'timeline', label: t('Таймлайн'), icon: IconHeat },
+  { key: 'network', label: t('Сеть'), icon: IconNet },
+  { key: 'anomalies', label: t('Аномалии'), icon: IconAlert },
+  { key: 'disk', label: t('Диск'), icon: IconDisk },
+  { key: 'programs', label: t('Программы'), icon: IconApps },
+  { key: 'system', label: t('Система'), icon: IconChip },
+  { key: 'gpu', label: t('Видеокарта'), icon: IconGpu },
+  { key: 'dev', label: t('Разработка'), icon: IconCode },
+  { key: 'history', label: t('История'), icon: IconClock },
+  { key: 'report', label: t('Отчёт'), icon: IconReport },
+  { key: 'events', label: t('События'), icon: IconList },
 ];
 
 function readPref<T>(key: string, fallback: T): T {
@@ -41,6 +42,12 @@ function readPref<T>(key: string, fallback: T): T {
 }
 function writePref(key: string, v: unknown) {
   try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* недоступно — не страшно */ }
+}
+
+/** Смена языка: запоминаем (окно и трей) и перезагружаем окно — все тексты и форматы берутся заново. */
+function switchLang(l: Lang) {
+  setLang(l);
+  api.setLanguage(l).catch(() => {}).finally(() => location.reload());
 }
 
 export function App() {
@@ -93,27 +100,33 @@ export function App() {
 
   return (
     <div className="shell">
-      <nav className="rail" aria-label="Разделы">
+      <nav className="rail" aria-label={t('Разделы')}>
         <div className="brand"><BrandMark /> SysWatch</div>
         {NAV.map(n => (
           <button key={n.key} className="nav-btn" aria-current={screen === n.key && !app ? 'page' : undefined} onClick={() => go(n.key)}>
             <n.icon /> {n.label}
-            {n.key === 'anomalies' && unseen > 0 && <span className="nav-badge" aria-label={`новых: ${unseen}`}>{unseen}</span>}
+            {n.key === 'anomalies' && unseen > 0 && <span className="nav-badge" aria-label={t('новых: {0}', unseen)}>{unseen}</span>}
           </button>
         ))}
+        <label className="lang-pick">
+          <span>{t('Язык')}</span>
+          <select className="select" value={lang()} onChange={e => switchLang(e.target.value as Lang)}>
+            {LANGS.map(l => <option key={l.code} value={l.code}>{l.label}</option>)}
+          </select>
+        </label>
         <div className="rail-foot">
           <div style={{ marginBottom: 6 }}>
             <span className={`agent-dot ${agent?.running ? '' : 'off'}`} />
-            <strong>{agent?.running ? 'Агент пишет данные' : 'Агент не запущен'}</strong>
+            <strong>{agent?.running ? t('Агент пишет данные') : t('Агент не запущен')}</strong>
           </div>
           {agent?.running ? (
             <>
-              <div>Расход: {pct(agent.cpu, 2)} процессора, {bytes(agent.ram)}</div>
-              <div>Потеряно событий: {agent.eventsLost ?? '—'}</div>
-              <div>Последняя запись {ago(agent.lastWrite)}</div>
+              <div>{t('Расход: {0} процессора, {1}', pct(agent.cpu, 2), bytes(agent.ram))}</div>
+              <div>{t('Потеряно событий: {0}', agent.eventsLost ?? '—')}</div>
+              <div>{t('Последняя запись {0}', ago(agent.lastWrite))}</div>
             </>
           ) : (
-            <div>История не пополняется. Запусти службу SysWatch Agent.</div>
+            <div>{t('История не пополняется. Запусти службу SysWatch Agent.')}</div>
           )}
         </div>
       </nav>
@@ -121,7 +134,7 @@ export function App() {
       <main className="main">
         <Scopes live={live} hist={hist} />
         <div className="content">
-          {liveError && !live && <div className="error">Нет связи с SysWatch: {liveError}</div>}
+          {liveError && !live && <div className="error">{t('Нет связи с SysWatch: {0}', liveError)}</div>}
           {app ? (
             <AppDetail name={app} range={range} setRange={setRange} onBack={() => setApp(null)} />
           ) : screen === 'now' ? (

@@ -33,13 +33,15 @@ public sealed class TrayContext : ApplicationContext
     private readonly DiskService _disk = new();
     private readonly GeoIp _geo = new();
     private readonly Hardware _hardware = new();
-    private readonly BrowserHistory _history = new();
+    private readonly BrowserHistory _history;
+    private readonly System.Windows.Forms.Timer _historyTimer = new() { Interval = 20_000 };
+    private bool _applyingHistory;
     private readonly System.Windows.Forms.Timer _diskTimer = new() { Interval = 3_600_000 };
     private readonly Insights _insights;
     private string _balloonTarget = "#anomalies";
     private bool _detecting;
     private double _lastCpu = 100;
-    private readonly ToolStripMenuItem _agentItem = new("Агент: проверяю…") { Enabled = false };
+    private readonly ToolStripMenuItem _agentItem = new("…") { Enabled = false };
     private MainForm? _form;
 
     private long _idle, _kernel, _user;
@@ -53,20 +55,38 @@ public sealed class TrayContext : ApplicationContext
         var firewall = new Firewall(_anomalies);
         var installed = new Installed(files, LiveSampler.RunningPaths);
         _insights = new Insights(files, _anomalies, _disk);
+        _history = new BrowserHistory(_anomalies);
         _api = new Api(_queries, _live, _anomalies, _disk, connections, installed, firewall, _geo,
             new Startup(signatures), _hardware, _insights, new DevEnv(installed), _history, new GpuQueries(files));
         _detector = new Detector(files, signatures, _anomalies);
 
+        L.SetDefault(_anomalies.Get("ui_lang")); // язык, выбранный в окне
+
         var menu = new ContextMenuStrip();
-        var open = new ToolStripMenuItem("Открыть SysWatch", null, (_, _) => ShowWindow());
+        var open = new ToolStripMenuItem("", null, (_, _) => ShowWindow());
         open.Font = new Font(open.Font, FontStyle.Bold);
+        var anomaliesItem = new ToolStripMenuItem("", null, (_, _) => ShowWindow("#anomalies"));
+        var reportItem = new ToolStripMenuItem("", null, (_, _) => ShowWindow("#report"));
+        var exitItem = new ToolStripMenuItem("", null, (_, _) => Quit());
         menu.Items.Add(open);
-        menu.Items.Add(new ToolStripMenuItem("Аномалии", null, (_, _) => ShowWindow("#anomalies")));
-        menu.Items.Add(new ToolStripMenuItem("Отчёт за неделю", null, (_, _) => ShowWindow("#report")));
+        menu.Items.Add(anomaliesItem);
+        menu.Items.Add(reportItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_agentItem);
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add(new ToolStripMenuItem("Выход", null, (_, _) => Quit()));
+        menu.Items.Add(exitItem);
+
+        void Relabel()
+        {
+            open.Text = L.T("Открыть SysWatch");
+            anomaliesItem.Text = L.T("Аномалии");
+            reportItem.Text = L.T("Отчёт за неделю");
+            exitItem.Text = L.T("Выход");
+        }
+        Relabel();
+        // Язык меняют в окне (другой поток) — подписи меню обновляем в потоке трея.
+        var ui = SynchronizationContext.Current;
+        L.DefaultChanged += () => { if (ui is null) Relabel(); else ui.Post(_ => Relabel(), null); };
 
         _tray = new NotifyIcon { Icon = _icon, Text = "SysWatch", ContextMenuStrip = menu, Visible = true };
         _tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) ShowWindow(); };
@@ -83,7 +103,29 @@ public sealed class TrayContext : ApplicationContext
         _diskTimer.Tick += async (_, _) => { _disk.MaybeAutoScan(_lastCpu); await DigestAsync(); };
         _diskTimer.Start();
 
+        // Отложенное удаление истории: ждём, пока пользователь сам закроет браузер, и удаляем.
+        _historyTimer.Tick += async (_, _) => await ApplyHistoryAsync();
+        _historyTimer.Start();
+
         if (openWindow) ShowWindow();
+    }
+
+    private async Task ApplyHistoryAsync()
+    {
+        if (_applyingHistory) return;
+        _applyingHistory = true;
+        try
+        {
+            var r = await Task.Run(() => _history.ApplyPending());
+            if (r is not null)
+            {
+                _balloonTarget = "#history";
+                _tray.ShowBalloonTip(8_000, L.T("SysWatch: история очищена"),
+                    L.T("{0}: удалено записей — {1}. Удаление выполнено после закрытия браузера.", string.Join(", ", r.Browsers), r.Deleted), ToolTipIcon.Info);
+            }
+        }
+        catch (Exception) { /* попробуем через 20 секунд */ }
+        finally { _applyingHistory = false; }
     }
 
     /// <summary>Открыть окно (при необходимости — сразу на разделе hash) или поднять уже открытое.</summary>
@@ -129,12 +171,12 @@ public sealed class TrayContext : ApplicationContext
 
         var agent = _queries.Agent();
         string agentLine = agent.Running
-            ? $"Агент работает, {agent.Cpu:F1}% процессора"
-            : "Агент не пишет данные";
+            ? L.T("Агент работает, {0:F1}% процессора", agent.Cpu)
+            : L.T("Агент не пишет данные");
         _agentItem.Text = agentLine;
 
         // Подсказка у иконки в трее ограничена 127 символами.
-        var text = $"SysWatch\nПроцессор {cpu:F0}%, память {mem.dwMemoryLoad}%\n{agentLine}";
+        var text = "SysWatch\n" + L.T("Процессор {0:F0}%, память {1}%", cpu, mem.dwMemoryLoad) + "\n" + agentLine;
         _tray.Text = text.Length > 127 ? text[..127] : text;
     }
 
@@ -151,7 +193,7 @@ public sealed class TrayContext : ApplicationContext
             if (notable.Count == 1)
                 _tray.ShowBalloonTip(10_000, notable[0].Title, notable[0].Detail, notable[0].Severity == "high" ? ToolTipIcon.Warning : ToolTipIcon.Info);
             else if (notable.Count > 1)
-                _tray.ShowBalloonTip(10_000, $"SysWatch: новых аномалий — {notable.Count}",
+                _tray.ShowBalloonTip(10_000, L.T("SysWatch: новых аномалий — {0}", notable.Count),
                     string.Join("\n", notable.Take(3).Select(a => $"{a.Title}: {a.App}")), ToolTipIcon.Warning);
         }
         catch (Exception)
@@ -181,11 +223,11 @@ public sealed class TrayContext : ApplicationContext
             var r = await Task.Run(() => _insights.Build(now - 7 * 86400, now));
             if (r.Hours < 1) return;
             int anomalies = r.Anomalies.Sum(a => a.Count);
-            var text = $"Процессор в среднем {r.AvgCpu:F0}%, память до {r.PeakMem:F0}%.\n" +
-                       (r.Episodes.Count > 0 ? $"Перегрузок: {r.Episodes.Count}, всего {r.SlowMinutes} мин.\n" : "Перегрузок не было.\n") +
-                       $"Новых программ: {r.NewPrograms.Count}, аномалий: {anomalies}.";
+            var text = L.T("Процессор в среднем {0:F0}%, память до {1:F0}%.", r.AvgCpu, r.PeakMem) + "\n" +
+                       (r.Episodes.Count > 0 ? L.T("Перегрузок: {0}, всего {1} мин.", r.Episodes.Count, r.SlowMinutes) : L.T("Перегрузок не было.")) + "\n" +
+                       L.T("Новых программ: {0}, аномалий: {1}.", r.NewPrograms.Count, anomalies);
             _balloonTarget = "#report";
-            _tray.ShowBalloonTip(15_000, "SysWatch: итоги недели", text, ToolTipIcon.Info);
+            _tray.ShowBalloonTip(15_000, L.T("SysWatch: итоги недели"), text, ToolTipIcon.Info);
         }
         catch (Exception)
         {
@@ -196,6 +238,7 @@ public sealed class TrayContext : ApplicationContext
     private void Quit()
     {
         _detectTimer.Stop();
+        _historyTimer.Stop();
         _diskTimer.Stop();
         _disk.Cancel();
         _timer.Stop();

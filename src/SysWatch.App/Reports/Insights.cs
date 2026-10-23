@@ -44,35 +44,35 @@ public sealed class Insights(DayFiles files, AnomalyStore anomalies, DiskService
     /// <summary>Фоновые службы Windows, которые чаще всего тормозят компьютер, — с понятным объяснением.</summary>
     private static readonly Dictionary<string, string> Known = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["TiWorker.exe"] = "установка обновлений Windows",
-        ["TrustedInstaller.exe"] = "установка обновлений Windows",
-        ["MoUsoCoreWorker.exe"] = "Центр обновления Windows",
-        ["usocoreworker.exe"] = "Центр обновления Windows",
-        ["wuauclt.exe"] = "Центр обновления Windows",
-        ["MsMpEng.exe"] = "проверка Защитником Windows",
-        ["MpDefenderCoreService.exe"] = "Защитник Windows",
-        ["NisSrv.exe"] = "сетевая защита Защитника Windows",
-        ["SearchIndexer.exe"] = "индексирование для поиска Windows",
-        ["SearchProtocolHost.exe"] = "индексирование для поиска Windows",
-        ["SearchFilterHost.exe"] = "индексирование для поиска Windows",
-        ["CompatTelRunner.exe"] = "сбор данных совместимости для Microsoft",
-        ["DeviceCensus.exe"] = "сбор данных об устройстве для Microsoft",
-        ["OneDrive.exe"] = "синхронизация OneDrive",
-        ["MicrosoftEdgeUpdate.exe"] = "обновление Edge",
-        ["GoogleUpdate.exe"] = "обновление Chrome",
-        ["dism.exe"] = "обслуживание образа Windows",
-        ["cleanmgr.exe"] = "очистка диска",
-        ["defrag.exe"] = "оптимизация диска",
-        ["vmmem"] = "виртуальная машина (WSL или Docker)",
-        ["vmmemWSL"] = "виртуальная машина WSL",
-        ["dwm.exe"] = "отрисовка окон",
-        ["audiodg.exe"] = "обработка звука",
-        ["WmiPrvSE.exe"] = "запросы WMI от какой-то программы",
-        ["sppsvc.exe"] = "проверка лицензии Windows",
-        ["msiexec.exe"] = "установка программы",
+        ["TiWorker.exe"] = L.K("установка обновлений Windows"),
+        ["TrustedInstaller.exe"] = L.K("установка обновлений Windows"),
+        ["MoUsoCoreWorker.exe"] = L.K("Центр обновления Windows"),
+        ["usocoreworker.exe"] = L.K("Центр обновления Windows"),
+        ["wuauclt.exe"] = L.K("Центр обновления Windows"),
+        ["MsMpEng.exe"] = L.K("проверка Защитником Windows"),
+        ["MpDefenderCoreService.exe"] = L.K("Защитник Windows"),
+        ["NisSrv.exe"] = L.K("сетевая защита Защитника Windows"),
+        ["SearchIndexer.exe"] = L.K("индексирование для поиска Windows"),
+        ["SearchProtocolHost.exe"] = L.K("индексирование для поиска Windows"),
+        ["SearchFilterHost.exe"] = L.K("индексирование для поиска Windows"),
+        ["CompatTelRunner.exe"] = L.K("сбор данных совместимости для Microsoft"),
+        ["DeviceCensus.exe"] = L.K("сбор данных об устройстве для Microsoft"),
+        ["OneDrive.exe"] = L.K("синхронизация OneDrive"),
+        ["MicrosoftEdgeUpdate.exe"] = L.K("обновление Edge"),
+        ["GoogleUpdate.exe"] = L.K("обновление Chrome"),
+        ["dism.exe"] = L.K("обслуживание образа Windows"),
+        ["cleanmgr.exe"] = L.K("очистка диска"),
+        ["defrag.exe"] = L.K("оптимизация диска"),
+        ["vmmem"] = L.K("виртуальная машина (WSL или Docker)"),
+        ["vmmemWSL"] = L.K("виртуальная машина WSL"),
+        ["dwm.exe"] = L.K("отрисовка окон"),
+        ["audiodg.exe"] = L.K("обработка звука"),
+        ["WmiPrvSE.exe"] = L.K("запросы WMI от какой-то программы"),
+        ["sppsvc.exe"] = L.K("проверка лицензии Windows"),
+        ["msiexec.exe"] = L.K("установка программы"),
     };
 
-    private static string? Hint(string app) => Known.TryGetValue(app, out var h) ? h : null;
+    private static string? Hint(string app) => Known.TryGetValue(app, out var h) ? L.T(h) : null;
 
     // ── Данные ───────────────────────────────────────────────────────────
 
@@ -166,7 +166,7 @@ public sealed class Insights(DayFiles files, AnomalyStore anomalies, DiskService
         var started = StartedBetween(from - 180, to);
 
         if (sys.Count == 0 && now.Count == 0)
-            return new Why(from, to, false, 0, 0, 0, 0, [], "В это время агент не записывал данные: компьютер был выключен, спал или служба не работала.", [], [], started);
+            return new Why(from, to, false, 0, 0, 0, 0, [], L.T("В это время агент не записывал данные: компьютер был выключен, спал или служба не работала."), [], [], started);
 
         double avgCpu = sys.Count > 0 ? sys.Values.Average(v => v.Cpu) : 0, peakCpu = sys.Count > 0 ? sys.Values.Max(v => v.Cpu) : 0;
         double avgMem = sys.Count > 0 ? sys.Values.Average(v => v.Mem) : 0, peakMem = sys.Count > 0 ? sys.Values.Max(v => v.Mem) : 0;
@@ -194,43 +194,40 @@ public sealed class Insights(DayFiles files, AnomalyStore anomalies, DiskService
         if (peakCpu >= CpuBusy)
         {
             kinds.Add("cpu");
-            details.Add($"Процессор был занят на {peakCpu:F0}% (в среднем {avgCpu:F0}%). Больше всего его загружали: " +
-                        string.Join(", ", byCpu.Take(3).Select(c => $"{Label(c)} — {c.Cpu:F0}%")) + ".");
+            details.Add(L.T("Процессор был занят на {0:F0}% (в среднем {1:F0}%). Больше всего его загружали: {2}.", peakCpu, avgCpu,
+                        string.Join(", ", byCpu.Take(3).Select(c => $"{Label(c)} — {c.Cpu:F0}%"))));
             foreach (var c in byCpu.Where(c => c.Cpu >= 5 && c.Cpu >= c.CpuUsual * 3 + 2).Take(2))
                 details.Add(c.CpuUsual < 1
-                    ? $"{c.App} до этого почти не работал — нагрузка возникла внезапно."
-                    : $"{c.App} обычно берёт около {c.CpuUsual:F0}%, здесь — {c.Cpu:F0}%: это всплеск, а не постоянный фон.");
+                    ? L.T("{0} до этого почти не работал — нагрузка возникла внезапно.", c.App)
+                    : L.T("{0} обычно берёт около {1:F0}%, здесь — {2:F0}%: это всплеск, а не постоянный фон.", c.App, c.CpuUsual, c.Cpu));
             shown.AddRange(byCpu);
         }
 
         if (peakMem >= MemBusy)
         {
             kinds.Add("mem");
-            details.Add($"Память была заполнена на {peakMem:F0}%. В таком состоянии Windows выгружает данные программ на диск, " +
-                        "и всё начинает отвечать с задержкой. Больше всего памяти держали: " +
-                        string.Join(", ", byMem.Take(3).Select(c => $"{Label(c)} — {Gb(c.Mem)}")) + ".");
+            details.Add(L.T("Память была заполнена на {0:F0}%. В таком состоянии Windows выгружает данные программ на диск, и всё начинает отвечать с задержкой. Больше всего памяти держали: {1}.", peakMem,
+                        string.Join(", ", byMem.Take(3).Select(c => $"{Label(c)} — {Gb(c.Mem)}"))));
             var grower = culprits.Where(c => c.MemGrowth >= 500L * 1048576).OrderByDescending(c => c.MemGrowth).FirstOrDefault();
-            if (grower is not null) details.Add($"{grower.App} вырос на {Gb(grower.MemGrowth)} за полчаса до этого.");
+            if (grower is not null) details.Add(L.T("{0} вырос на {1} за полчаса до этого.", grower.App, Gb(grower.MemGrowth)));
             shown.AddRange(byMem.Take(3));
         }
 
         if (byIo.Count > 0)
         {
             kinds.Add("io");
-            details.Add("Активно читали и писали данные: " +
-                        string.Join(", ", byIo.Select(c => $"{Label(c)} — {c.Io / 1048576:F0} МБ/с")) +
-                        ". Если диск жёсткий (HDD), такой поток сам по себе тормозит остальные программы.");
+            details.Add(L.T("Активно читали и писали данные: {0}. Если диск жёсткий (HDD), такой поток сам по себе тормозит остальные программы.",
+                        string.Join(", ", byIo.Select(c => Label(c) + " — " + L.T("{0:F0} МБ/с", c.Io / 1048576)))));
             shown.AddRange(byIo);
         }
 
         var suspicious = started.Where(s => s.Hint is not null).ToList();
         if (suspicious.Count > 0)
-            details.Add("Незадолго до этого запустились: " + string.Join(", ", suspicious.Select(s => $"{s.App} ({s.Hint})")) + ".");
+            details.Add(L.T("Незадолго до этого запустились: {0}.", string.Join(", ", suspicious.Select(s => $"{s.App} ({s.Hint})"))));
 
         string verdict = kinds.Count switch
         {
-            0 => $"Перегрузки не видно: процессор в среднем {avgCpu:F0}% (пик {peakCpu:F0}%), память {peakMem:F0}%. " +
-                 "Причина могла быть там, куда агент не смотрит: видеокарта, перегрев и сброс частоты, ожидание диска или сети, зависшее окно программы.",
+            0 => L.T("Перегрузки не видно: процессор в среднем {0:F0}% (пик {1:F0}%), память {2:F0}%. Причина могла быть там, куда агент не смотрит: видеокарта, перегрев и сброс частоты, ожидание диска или сети, зависшее окно программы.", avgCpu, peakCpu, peakMem),
             _ => Lead(kinds, shown, suspicious),
         };
 
@@ -241,15 +238,15 @@ public sealed class Insights(DayFiles files, AnomalyStore anomalies, DiskService
     private static string Lead(List<string> kinds, List<Culprit> shown, List<StartedProc> known)
     {
         var top = shown.FirstOrDefault();
-        string what = string.Join(" и ", kinds.Select(k => k switch { "cpu" => "процессор", "mem" => "память", _ => "диск" }));
-        string who = top is null ? "" : $" Главный виновник — {Label(top)}.";
-        if (top?.Hint is null && known.FirstOrDefault() is { } k) who += $" Рядом по времени — {k.Hint}.";
-        return $"Не хватало ресурсов: {what}.{who}";
+        string what = string.Join(L.T(" и "), kinds.Select(k => k switch { "cpu" => L.T("процессор"), "mem" => L.T("память"), _ => L.T("диск") }));
+        string who = top is null ? "" : " " + L.T("Главный виновник — {0}.", Label(top));
+        if (top?.Hint is null && known.FirstOrDefault() is { } k) who += " " + L.T("Рядом по времени — {0}.", k.Hint);
+        return L.T("Не хватало ресурсов: {0}.", what) + who;
     }
 
     private static string Label(Culprit c) => c.Hint is null ? c.App : $"{c.App} ({c.Hint})";
 
-    private static string Gb(long b) => b >= 1L << 30 ? $"{b / (double)(1L << 30):F1} ГБ" : $"{b >> 20} МБ";
+    private static string Gb(long b) => b >= 1L << 30 ? L.T("{0:F1} ГБ", b / (double)(1L << 30)) : L.T("{0} МБ", b >> 20);
 
     /// <summary>Эпизоды перегрузки: подряд идущие минуты с процессором ≥75% или памятью ≥90%.</summary>
     public List<(long From, long To, double Score)> Episodes(SortedDictionary<long, (double Cpu, double Mem)> sys)

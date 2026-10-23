@@ -1,3 +1,5 @@
+import { lang } from './i18n';
+
 // Контракт между окном (C#) и интерфейсом. Все ts — Unix-секунды UTC.
 // Байты — в байтах, CPU — в процентах от всех ядер.
 
@@ -228,19 +230,22 @@ export interface CpuInfo {
 }
 
 async function postJson<T>(path: string): Promise<T> {
-  const r = await fetch(path, { method: 'POST' });
+  const r = await fetch(withLang(path), { method: 'POST' });
   if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
   return r.json() as Promise<T>;
 }
 
+/** Язык уходит с каждым запросом: тексты, которые формирует программа (вердикты, сбои, сообщения), — на нём же. */
+const withLang = (path: string) => `${path}${path.includes('?') ? '&' : '?'}lang=${lang()}`;
+
 async function postBody<T>(path: string, body: unknown): Promise<T> {
-  const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const r = await fetch(withLang(path), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
   return r.json() as Promise<T>;
 }
 
 async function post(path: string, body?: unknown): Promise<void> {
-  const r = await fetch(path, {
+  const r = await fetch(withLang(path), {
     method: 'POST',
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
@@ -249,7 +254,7 @@ async function post(path: string, body?: unknown): Promise<void> {
 }
 
 async function get<T>(path: string): Promise<T> {
-  const r = await fetch(path);
+  const r = await fetch(withLang(path));
   if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
   return r.json() as Promise<T>;
 }
@@ -347,7 +352,7 @@ export interface DevState { busy: boolean; data: DevEnvironment | null }
 // ── История браузеров ──
 
 export interface BrowserProfile { id: string; browser: string; profile: string; ok: boolean; error: string | null; visits: number; searches: number; db: string }
-export interface HistoryDeleteResult { ok: boolean; message: string; deleted: number; running: string[] }
+export interface HistoryDeleteResult { ok: boolean; message: string; deleted: number; running: string[]; pending: string[] }
 export interface HistoryItem { ts: number; source: string; kind: 'visit' | 'search'; url: string; title: string | null; domain: string; term: string | null; engine: string | null }
 export interface DomainStat { domain: string; visits: number; last: number; sources: string[] }
 export interface HistoryResult {
@@ -371,8 +376,11 @@ export interface Crash { ts: number; kind: CrashKind; title: string; detail: str
 export interface CrashList { days: number; items: Crash[]; counts: Partial<Record<CrashKind, number>> }
 
 export const api = {
+  setLanguage: (l: string) => postJson<boolean>(`/api/settings/lang?value=${l}`),
   gpu: (range: number) => get<GpuView>(`/api/gpu?range=${range}`),
   crashes: (days: number) => get<CrashList>(`/api/system/crashes?days=${days}`),
+  historyPending: () => get<string[]>('/api/history/pending'),
+  historyApplyNow: (browser: string) => postJson<ActionResult>(`/api/history/apply-now?browser=${encodeURIComponent(browser)}`),
   historyDelete: (req: { items?: { source: string; url: string }[]; domain?: string; sources?: string[]; closeBrowsers: boolean; clearProfiles?: string[]; clearFrom?: number }) =>
     postBody<HistoryDeleteResult>('/api/history/delete', req),
   history: (days: number, q: string, source: string, kind: string) =>

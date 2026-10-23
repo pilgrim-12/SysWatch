@@ -5,13 +5,14 @@ import { useLoad } from '../hooks';
 import { COLOR, RANGES, appLabel, bytes, dayTime, pct } from '../format';
 import { Plot } from '../components/Plot';
 import { Heatmap } from '../components/Heatmap';
+import { t } from '../i18n';
 
 type Metric = 'cpu' | 'mem' | 'net';
 
 const METRICS: { key: Metric; label: string; color: string; fmt: (v: number) => string }[] = [
-  { key: 'cpu', label: 'Процессор', color: COLOR.cpu, fmt: v => pct(v) },
-  { key: 'mem', label: 'Память', color: COLOR.mem, fmt: v => bytes(v) },
-  { key: 'net', label: 'Сеть', color: COLOR.net, fmt: v => `${bytes(v)} за минуту` },
+  { key: 'cpu', label: t('Процессор'), color: COLOR.cpu, fmt: v => pct(v) },
+  { key: 'mem', label: t('Память'), color: COLOR.mem, fmt: v => bytes(v) },
+  { key: 'net', label: t('Сеть'), color: COLOR.net, fmt: v => t('{0} за минуту', bytes(v)) },
 ];
 
 export function Timeline({ range, setRange, onApp }: { range: number; setRange: (m: number) => void; onApp: (n: string) => void }) {
@@ -24,8 +25,8 @@ export function Timeline({ range, setRange, onApp }: { range: number; setRange: 
   useEffect(() => { setPicked(null); }, [range]);
 
   const sysSeries = useMemo(() => data ? [
-    { label: 'Процессор', color: COLOR.cpu, values: data.system.cpu, fill: true },
-    { label: 'Память', color: COLOR.mem, values: data.system.mem },
+    { label: t('Процессор'), color: COLOR.cpu, values: data.system.cpu, fill: true },
+    { label: t('Память'), color: COLOR.mem, values: data.system.mem },
   ] : [], [data]);
 
   const rows = useMemo(() => {
@@ -59,11 +60,11 @@ export function Timeline({ range, setRange, onApp }: { range: number; setRange: 
     <>
       <div className="head">
         <div>
-          <h1>Таймлайн</h1>
-          <p>Кто и когда нагружал систему. Нажми на минуту на графике или на карте, чтобы увидеть снимок того момента.</p>
+          <h1>{t('Таймлайн')}</h1>
+          <p>{t('Кто и когда нагружал систему. Нажми на минуту на графике или на карте, чтобы увидеть снимок того момента.')}</p>
         </div>
         <div className="head-tools">
-          <div className="seg" role="group" aria-label="Период">
+          <div className="seg" role="group" aria-label={t('Период')}>
             {RANGES.map(r => (
               <button key={r.minutes} aria-pressed={range === r.minutes} onClick={() => setRange(r.minutes)}>{r.label}</button>
             ))}
@@ -71,22 +72,22 @@ export function Timeline({ range, setRange, onApp }: { range: number; setRange: 
         </div>
       </div>
 
-      {tl.error && <div className="error">Не удалось загрузить историю: {tl.error}</div>}
+      {tl.error && <div className="error">{t('Не удалось загрузить историю: {0}', tl.error)}</div>}
 
       <section className="block">
-        <h2>Вся система <small>процессор и занятая память, % по минутам</small></h2>
+        <h2>{t('Вся система')} <small>{t('процессор и занятая память, % по минутам')}</small></h2>
         <div className="panel chart-box">
           {data && data.minutes.length > 1
             ? <Plot ts={data.minutes} series={sysSeries} height={170} yMax={100} yFormat={v => `${v}%`} onPick={setPicked} />
-            : <div className="empty">{tl.loading ? 'Загружаю…' : 'За этот период агент ещё ничего не записал.'}</div>}
+            : <div className="empty">{tl.loading ? t('Загружаю…') : t('За этот период агент ещё ничего не записал.')}</div>}
         </div>
       </section>
 
       <div className="grid-2">
         <section className="block">
           <h2>
-            Программы по минутам
-            <span className="seg" role="group" aria-label="Показатель" style={{ marginLeft: 'auto' }}>
+            {t('Программы по минутам')}
+            <span className="seg" role="group" aria-label={t('Показатель')} style={{ marginLeft: 'auto' }}>
               {METRICS.map(x => (
                 <button key={x.key} aria-pressed={metric === x.key} onClick={() => setMetric(x.key)}>{x.label}</button>
               ))}
@@ -95,22 +96,22 @@ export function Timeline({ range, setRange, onApp }: { range: number; setRange: 
           <div className="panel" style={{ padding: 12 }}>
             {data && rows.length
               ? <Heatmap rows={rows} minutes={data.minutes} color={m.color} selected={picked} format={m.fmt} onPick={setPicked} onApp={onApp} />
-              : <div className="empty">Нет данных за период</div>}
+              : <div className="empty">{t('Нет данных за период')}</div>}
           </div>
         </section>
 
         <section className="block">
-          <h2>Снимок момента</h2>
+          <h2>{t('Снимок момента')}</h2>
           <div className="panel snapshot">
             {!snapshot || picked == null ? (
-              <div className="empty">Выбери минуту на графике или на карте слева.</div>
+              <div className="empty">{t('Выбери минуту на графике или на карте слева.')}</div>
             ) : (
               <>
                 <h3>{dayTime(picked)} <span>
-                  процессор {pct(data!.system.cpu[idx], 0)}, память {pct(data!.system.mem[idx], 0)}
+                  {t('процессор {0}, память {1}', pct(data!.system.cpu[idx], 0), pct(data!.system.mem[idx], 0))}
                 </span></h3>
                 <table className="table">
-                  <thead><tr><th>Программа</th><th>Процессор</th><th>Память</th><th>Сеть</th></tr></thead>
+                  <thead><tr><th>{t('Программа')}</th><th>{t('Процессор')}</th><th>{t('Память')}</th><th>{t('Сеть')}</th></tr></thead>
                   <tbody>
                     {snapshot.map(s => (
                       <tr key={s.name} onClick={() => onApp(s.name)}>
@@ -125,7 +126,7 @@ export function Timeline({ range, setRange, onApp }: { range: number; setRange: 
                 <div style={{ marginTop: 12 }}>
                   {why?.at === picked && why.data
                     ? <WhyCard why={why.data} onApp={onApp} />
-                    : <button className="btn" disabled={why?.at === picked} onClick={explain}>{why?.at === picked ? 'Разбираю…' : 'Почему тормозило?'}</button>}
+                    : <button className="btn" disabled={why?.at === picked} onClick={explain}>{why?.at === picked ? t('Разбираю…') : t('Почему тормозило?')}</button>}
                 </div>
               </>
             )}

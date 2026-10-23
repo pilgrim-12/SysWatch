@@ -58,9 +58,10 @@ public sealed class Detector(DayFiles files, Signatures signatures, AnomalyStore
         return found;
     }
 
-    private void Add(List<Anomaly> found, long ts, string rule, string severity, string app, string title, string detail, string key)
+    /// <summary>title и detail — русские шаблоны (L.K), подстановки — в args; перевод при чтении.</summary>
+    private void Add(List<Anomaly> found, long ts, string rule, string severity, string app, string title, string detail, string key, params string[] args)
     {
-        if (store.Add(ts, rule, severity, app, title, detail, key) is { } a) found.Add(a);
+        if (store.Add(ts, rule, severity, app, title, detail, key, args.Length > 0 ? args : null) is { } a) found.Add(a);
     }
 
     // ── История за прошлые дни: какие программы и адреса уже встречались ──
@@ -113,15 +114,15 @@ public sealed class Detector(DayFiles files, Signatures signatures, AnomalyStore
 
             if (IsTempPath(p.Path))
                 Add(found, p.Ts, "temp_exec", "medium", p.Image,
-                    "Запуск из временной папки",
-                    $"{p.Path}. Так запускаются установщики, но и вредоносные программы тоже.",
-                    $"temp_exec|{p.Path}");
+                    L.K("Запуск из временной папки"),
+                    L.K("{0}. Так запускаются установщики, но и вредоносные программы тоже."),
+                    $"temp_exec|{p.Path}", p.Path);
 
             if (_hasHistory && !p.SeenToday && !_oldPaths.Contains(p.Path))
                 Add(found, p.Ts, "new_program", "low", p.Image,
-                    "Новая программа",
-                    $"Впервые запущена: {p.Path}",
-                    $"new_program|{p.Path}");
+                    L.K("Новая программа"),
+                    L.K("Впервые запущена: {0}"),
+                    $"new_program|{p.Path}", p.Path);
         }
     }
 
@@ -148,9 +149,9 @@ public sealed class Detector(DayFiles files, Signatures signatures, AnomalyStore
             var first = g.First();
             var dests = string.Join(", ", g.Select(x => x.Dest).Distinct().Take(3));
             Add(found, first.Ts, "unsigned_net", "high", first.Image,
-                "Программа без подписи выходит в сеть",
-                $"{g.Key} подключалась к {dests}. У файла нет цифровой подписи издателя.",
-                $"unsigned_net|{g.Key}");
+                L.K("Программа без подписи выходит в сеть"),
+                L.K("{0} подключалась к {1}. У файла нет цифровой подписи издателя."),
+                $"unsigned_net|{g.Key}", g.Key, dests);
         }
     }
 
@@ -181,9 +182,9 @@ public sealed class Detector(DayFiles files, Signatures signatures, AnomalyStore
             if (x.SeenToday || Browsers.Contains(x.Image)) continue;
             if (_oldAppDomains.Contains(x.Image + "|" + x.Domain)) continue;
             Add(found, x.Ts, "new_domain", "low", x.Image,
-                "Новый адрес у программы",
-                $"{x.Image} впервые обратилась к {x.Domain}",
-                $"new_domain|{x.Image}|{x.Domain}");
+                L.K("Новый адрес у программы"),
+                L.K("{0} впервые обратилась к {1}"),
+                $"new_domain|{x.Image}|{x.Domain}", x.Image, x.Domain);
         }
     }
 
@@ -212,9 +213,9 @@ public sealed class Detector(DayFiles files, Signatures signatures, AnomalyStore
             if (pct.Any(p => p < CpuThresholdPct)) continue;
             var hour = DateTimeOffset.FromUnixTimeSeconds(end).ToLocalTime().ToString("yyyyMMddHH");
             Add(found, end, "cpu", "medium", app,
-                "Долгая высокая нагрузка",
-                $"{app} держит процессор на {pct.Average():F0}% всех ядер уже {CpuMinutes} минут подряд",
-                $"cpu|{app}|{hour}");
+                L.K("Долгая высокая нагрузка"),
+                L.K("{0} держит процессор на {1}% всех ядер уже {2} минут подряд"),
+                $"cpu|{app}|{hour}", app, pct.Average().ToString("F0"), CpuMinutes.ToString());
         }
     }
 
@@ -248,13 +249,14 @@ public sealed class Detector(DayFiles files, Signatures signatures, AnomalyStore
 
             var bucket = DateTimeOffset.FromUnixTimeSeconds(t1).ToLocalTime();
             Add(found, t1, "memory", "medium", app,
-                "Память растёт",
-                $"{app}: {Gb(m0)} → {Gb(m1)} за час без снижения. Похоже на утечку памяти.",
-                $"memory|{app}|{bucket:yyyyMMdd}{bucket.Hour / 6}");
+                L.K("Память растёт"),
+                L.K("{0}: {1} ГБ → {2} ГБ за час без снижения. Похоже на утечку памяти."),
+                $"memory|{app}|{bucket:yyyyMMdd}{bucket.Hour / 6}", app, Gb(m0), Gb(m1));
         }
     }
 
-    private static string Gb(long b) => b >= 1L << 30 ? $"{b / (double)(1L << 30):F1} ГБ" : $"{b / (1 << 20)} МБ";
+    // Аргумент хранится в базе и переводится позже, поэтому число без единицы (единица — в шаблоне).
+    private static string Gb(long b) => (b / (double)(1L << 30)).ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
 
     // ── Программа впервые открыла TCP-порт для подключений из сети ──
 
@@ -285,10 +287,11 @@ public sealed class Detector(DayFiles files, Signatures signatures, AnomalyStore
             var app = Path.GetFileName(path);
             bool unsigned = signatures.Check(path).Status == "unsigned";
             Add(found, now, "exposed_port", unsigned ? "high" : "medium", app,
-                "Программа принимает подключения из сети",
-                $"{path} открыла порт {string.Join(", ", ports.Select(p => $"TCP {p}"))} не только для этого компьютера, а для всей сети." +
-                (unsigned ? " У файла нет цифровой подписи." : ""),
-                $"exposed_port|{path}");
+                L.K("Программа принимает подключения из сети"),
+                unsigned
+                    ? L.K("{0} открыла порт {1} не только для этого компьютера, а для всей сети. У файла нет цифровой подписи.")
+                    : L.K("{0} открыла порт {1} не только для этого компьютера, а для всей сети."),
+                $"exposed_port|{path}", path, string.Join(", ", ports.Select(p => $"TCP {p}")));
         }
         store.Set("exposed_programs", JsonSerializer.Serialize(known));
     }
@@ -327,9 +330,11 @@ public sealed class Detector(DayFiles files, Signatures signatures, AnomalyStore
             if (e.Command.Contains(OwnDir, StringComparison.OrdinalIgnoreCase)) continue;
             var app = string.IsNullOrEmpty(e.Command) ? e.Name : Path.GetFileName(e.Command.Trim('"').Split('"')[0]);
             Add(found, now, "autostart", e.Critical ? "high" : "medium", string.IsNullOrEmpty(app) ? e.Name : app,
-                "Новое в автозагрузке",
-                string.IsNullOrEmpty(e.Command) ? $"{e.Where}: {e.Name}" : $"{e.Where}: {e.Name} → {e.Command}",
-                $"autostart|{e.Key}");
+                L.K("Новое в автозагрузке"),
+                e.Key.StartsWith("run|")
+                    ? string.IsNullOrEmpty(e.Command) ? L.K("Реестр {0}: {1}") : L.K("Реестр {0}: {1} → {2}")
+                    : string.IsNullOrEmpty(e.Command) ? L.K("{0}: {1}") : L.K("{0}: {1} → {2}"),
+                $"autostart|{e.Key}", e.Where, e.Name, e.Command);
         }
     }
 }
