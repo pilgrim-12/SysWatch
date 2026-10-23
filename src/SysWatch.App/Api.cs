@@ -5,6 +5,7 @@ using SysWatch.App.Anomalies;
 using SysWatch.App.Data;
 using SysWatch.App.Disk;
 using SysWatch.App.Programs;
+using SysWatch.App.Reports;
 using SysWatch.App.Sampling;
 using SysWatch.App.Sys;
 
@@ -12,7 +13,7 @@ namespace SysWatch.App;
 
 /// <summary>Маршрутизатор /api/* для интерфейса. Возвращает (код, JSON).</summary>
 public sealed class Api(Queries queries, LiveSampler live, AnomalyStore anomalies, DiskService disk, Connections connections,
-    Installed programs, Firewall firewall, GeoIp geo, Startup startup, Hardware hardware)
+    Installed programs, Firewall firewall, GeoIp geo, Startup startup, Hardware hardware, Insights insights)
 {
     private static readonly JsonSerializerOptions Json = new()
     {
@@ -61,6 +62,9 @@ public sealed class Api(Queries queries, LiveSampler live, AnomalyStore anomalie
                     return (200, Serialize(Hardware.Wakes()));
                 case "/api/system/cpu" when method == "GET":
                     return (200, Serialize(hardware.Cpu()));
+
+                case "/api/report/open" when method == "POST":
+                    return (200, Serialize(OpenFile(q["path"] ?? "")));
 
                 case "/api/geo/download" when method == "POST":
                     return (200, Serialize(await geo.DownloadAsync()));
@@ -116,6 +120,10 @@ public sealed class Api(Queries queries, LiveSampler live, AnomalyStore anomalie
                     "/api/network" => queries.Network(range),
                     "/api/app" => queries.App(q["name"] ?? "", range),
                     "/api/events" => queries.Events(range),
+                    "/api/report" => BuildReport(q["days"]),
+                    "/api/report/export" when method == "POST" => Export(q["days"]),
+                    "/api/why" => insights.Explain(L(q["from"]), L(q["to"])),
+                    "/api/slowdowns" => insights.SlowDowns(DateTimeOffset.UtcNow.ToUnixTimeSeconds() - range * 60L, DateTimeOffset.UtcNow.ToUnixTimeSeconds()),
                     _ => null,
                 };
                 return result is null ? (404, "\"not found\"") : (200, Serialize(result));
@@ -130,6 +138,36 @@ public sealed class Api(Queries queries, LiveSampler live, AnomalyStore anomalie
             return (500, JsonSerializer.Serialize(ex.Message));
         }
     }
+
+    private static long L(string? s) => long.TryParse(s, out var v) ? v : 0;
+
+    private Report BuildReport(string? days)
+    {
+        var (from, to) = Insights.Period(Math.Clamp(int.TryParse(days, out var d) ? d : 7, 1, 31));
+        return insights.Build(from, to);
+    }
+
+    private ExportResult Export(string? days)
+    {
+        var path = ReportHtml.Save(BuildReport(days));
+        OpenFile(path);
+        return new ExportResult(true, path);
+    }
+
+    /// <summary>
+    /// Открыть файл программой по умолчанию. Через explorer.exe, а не напрямую: окно SysWatch работает
+    /// от администратора, а браузер с отчётом должен открыться с обычными правами пользователя.
+    /// </summary>
+    private static ActionResult OpenFile(string path)
+    {
+        var docs = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "SysWatch");
+        if (!File.Exists(path) || !Path.GetFullPath(path).StartsWith(docs, StringComparison.OrdinalIgnoreCase))
+            return new(false, "Файл отчёта не найден.");
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{path}\"") { UseShellExecute = false });
+        return new(true, "Открыто.");
+    }
+
+    private sealed record ExportResult(bool Ok, string Path);
 
     private sealed record CleanRequest(string[]? Categories, string[]? Exclude);
 

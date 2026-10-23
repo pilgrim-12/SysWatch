@@ -37,7 +37,10 @@ public sealed class DnsEtwCollector(
             stats.DnsSession = _session;
 
             _session.Source.Dynamic.All += OnEvent;
-            _session.EnableProvider(Provider, TraceEventLevel.Informational);
+            // Нужен только «запрос завершён» (3008). Остальные события клиента DNS (их около десятка на каждый
+            // запрос) отсекаются ещё в ядре и не доходят до разбора — это главный расход DNS-сессии.
+            _session.EnableProvider(Provider, TraceEventLevel.Informational, ulong.MaxValue,
+                new TraceEventProviderOptions { EventIDsToEnable = [QueryCompletedEventId] });
 
             log.LogInformation("ETW DNS session '{Name}' started", SessionName);
             _session.Source.Process();

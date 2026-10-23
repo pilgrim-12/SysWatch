@@ -9,6 +9,7 @@ export const IconDisk = () => <svg {...base}><rect x="3" y="5" width="18" height
 export const IconLink = () => <svg {...base}><path d="M4 17 10 11" /><path d="M7 11h3v3" /><path d="M20 7l-6 6" /><path d="M17 13h-3v-3" /><circle cx="4" cy="17" r="1.6" /><circle cx="20" cy="7" r="1.6" /></svg>;
 export const IconChip = () => <svg {...base}><rect x="6" y="6" width="12" height="12" rx="2" /><rect x="9.5" y="9.5" width="5" height="5" rx="1" /><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3" /></svg>;
 export const IconApps = () => <svg {...base}><rect x="3" y="3" width="8" height="8" rx="2" /><rect x="13" y="3" width="8" height="8" rx="2" /><rect x="3" y="13" width="8" height="8" rx="2" /><rect x="13" y="13" width="8" height="8" rx="2" /></svg>;
+export const IconReport = () => <svg {...base}><path d="M7 3h7l5 5v13H7z" /><path d="M14 3v5h5" /><path d="M10 17v-3M13 17v-5M16 17v-2" /></svg>;
 
 export const BrandMark = () => (
   <svg className="brand-mark" viewBox="0 0 24 24" fill="none">

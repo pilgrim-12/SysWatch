@@ -5,6 +5,7 @@ using SysWatch.App.Anomalies;
 using SysWatch.App.Data;
 using SysWatch.App.Disk;
 using SysWatch.App.Programs;
+using SysWatch.App.Reports;
 using SysWatch.App.Sys;
 using SysWatch.App.Sampling;
 
@@ -31,6 +32,8 @@ public sealed class TrayContext : ApplicationContext
     private readonly GeoIp _geo = new();
     private readonly Hardware _hardware = new();
     private readonly System.Windows.Forms.Timer _diskTimer = new() { Interval = 3_600_000 };
+    private readonly Insights _insights;
+    private string _balloonTarget = "#anomalies";
     private bool _detecting;
     private double _lastCpu = 100;
     private readonly ToolStripMenuItem _agentItem = new("Агент: проверяю…") { Enabled = false };
@@ -46,8 +49,9 @@ public sealed class TrayContext : ApplicationContext
         var connections = new Connections(_queries.RecentIpDomains, _geo);
         var firewall = new Firewall(_anomalies);
         var installed = new Installed(files, LiveSampler.RunningPaths);
+        _insights = new Insights(files, _anomalies, _disk);
         _api = new Api(_queries, _live, _anomalies, _disk, connections, installed, firewall, _geo,
-            new Startup(signatures), _hardware);
+            new Startup(signatures), _hardware, _insights);
         _detector = new Detector(files, signatures, _anomalies);
 
         var menu = new ContextMenuStrip();
@@ -55,6 +59,7 @@ public sealed class TrayContext : ApplicationContext
         open.Font = new Font(open.Font, FontStyle.Bold);
         menu.Items.Add(open);
         menu.Items.Add(new ToolStripMenuItem("Аномалии", null, (_, _) => ShowWindow("#anomalies")));
+        menu.Items.Add(new ToolStripMenuItem("Отчёт за неделю", null, (_, _) => ShowWindow("#report")));
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_agentItem);
         menu.Items.Add(new ToolStripSeparator());
@@ -62,7 +67,7 @@ public sealed class TrayContext : ApplicationContext
 
         _tray = new NotifyIcon { Icon = _icon, Text = "SysWatch", ContextMenuStrip = menu, Visible = true };
         _tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) ShowWindow(); };
-        _tray.BalloonTipClicked += (_, _) => ShowWindow("#anomalies");
+        _tray.BalloonTipClicked += (_, _) => ShowWindow(_balloonTarget);
 
         _timer.Tick += (_, _) => Refresh();
         _timer.Start();
@@ -72,7 +77,7 @@ public sealed class TrayContext : ApplicationContext
         _detectTimer.Start();
 
         // Раз в час проверяем, не пора ли сделать суточный снимок диска (только если компьютер не занят).
-        _diskTimer.Tick += (_, _) => _disk.MaybeAutoScan(_lastCpu);
+        _diskTimer.Tick += async (_, _) => { _disk.MaybeAutoScan(_lastCpu); await DigestAsync(); };
         _diskTimer.Start();
 
         if (openWindow) ShowWindow();
@@ -138,6 +143,7 @@ public sealed class TrayContext : ApplicationContext
         {
             var found = await Task.Run(() => _detector.Run());
             var notable = found.Where(a => a.Severity is "high" or "medium").ToList();
+            if (notable.Count > 0) _balloonTarget = "#anomalies";
             if (notable.Count == 1)
                 _tray.ShowBalloonTip(10_000, notable[0].Title, notable[0].Detail, notable[0].Severity == "high" ? ToolTipIcon.Warning : ToolTipIcon.Info);
             else if (notable.Count > 1)
@@ -151,6 +157,35 @@ public sealed class TrayContext : ApplicationContext
         finally
         {
             _detecting = false;
+        }
+    }
+
+    /// <summary>
+    /// Раз в неделю — уведомление с итогами. Первая неделя после установки отсчитывается с момента запуска,
+    /// показываем днём (9–21), чтобы не будить уведомлением ночью.
+    /// </summary>
+    private async Task DigestAsync()
+    {
+        const string key = "digest_last";
+        long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        try
+        {
+            if (!long.TryParse(_anomalies.Get(key), out var last)) { _anomalies.Set(key, now.ToString()); return; }
+            if (now - last < 7 * 86400 || DateTime.Now.Hour is < 9 or >= 21) return;
+            _anomalies.Set(key, now.ToString());
+
+            var r = await Task.Run(() => _insights.Build(now - 7 * 86400, now));
+            if (r.Hours < 1) return;
+            int anomalies = r.Anomalies.Sum(a => a.Count);
+            var text = $"Процессор в среднем {r.AvgCpu:F0}%, память до {r.PeakMem:F0}%.\n" +
+                       (r.Episodes.Count > 0 ? $"Перегрузок: {r.Episodes.Count}, всего {r.SlowMinutes} мин.\n" : "Перегрузок не было.\n") +
+                       $"Новых программ: {r.NewPrograms.Count}, аномалий: {anomalies}.";
+            _balloonTarget = "#report";
+            _tray.ShowBalloonTip(15_000, "SysWatch: итоги недели", text, ToolTipIcon.Info);
+        }
+        catch (Exception)
+        {
+            // Сводка не обязательна: попробуем через час.
         }
     }
 

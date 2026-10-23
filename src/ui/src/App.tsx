@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, type Live } from './api';
 import { ago, bytes, pct } from './format';
 import { Scopes, emptyHistory, pushLive, type LiveHistory } from './components/Scopes';
-import { BrandMark, IconAlert, IconApps, IconChip, IconDisk, IconHeat, IconLink, IconList, IconNet, IconPulse } from './components/Icons';
+import { BrandMark, IconAlert, IconApps, IconChip, IconDisk, IconHeat, IconLink, IconList, IconNet, IconPulse, IconReport } from './components/Icons';
 import { Now } from './screens/Now';
 import { Timeline } from './screens/Timeline';
 import { Network } from './screens/Network';
@@ -13,8 +13,9 @@ import { Disk } from './screens/Disk';
 import { Connections } from './screens/Connections';
 import { Programs } from './screens/Programs';
 import { System } from './screens/System';
+import { Report } from './screens/Report';
 
-type Screen = 'now' | 'connections' | 'timeline' | 'network' | 'anomalies' | 'disk' | 'programs' | 'system' | 'events';
+type Screen = 'now' | 'connections' | 'timeline' | 'network' | 'anomalies' | 'disk' | 'programs' | 'system' | 'report' | 'events';
 
 const NAV: { key: Screen; label: string; icon: () => JSX.Element }[] = [
   { key: 'now', label: 'Сейчас', icon: IconPulse },
@@ -25,6 +26,7 @@ const NAV: { key: Screen; label: string; icon: () => JSX.Element }[] = [
   { key: 'disk', label: 'Диск', icon: IconDisk },
   { key: 'programs', label: 'Программы', icon: IconApps },
   { key: 'system', label: 'Система', icon: IconChip },
+  { key: 'report', label: 'Отчёт', icon: IconReport },
   { key: 'events', label: 'События', icon: IconList },
 ];
 
@@ -126,6 +128,8 @@ export function App() {
             <Connections onApp={setApp} />
           ) : screen === 'system' ? (
             <System onApp={setApp} />
+          ) : screen === 'report' ? (
+            <Report onApp={setApp} />
           ) : screen === 'programs' ? (
             <Programs />
           ) : screen === 'disk' ? (

@@ -47,7 +47,7 @@ public sealed class Flusher(
 
     private void FlushOnce()
     {
-        var bucket = aggregator.Swap();
+        var bucket = aggregator.Swap(registry.Get);
 
         _self.Refresh();
         var cpu = _self.TotalProcessorTime;

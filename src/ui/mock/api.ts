@@ -184,6 +184,77 @@ function events(range: number) {
   return out;
 }
 
+function whyMock(from: number, to: number, kind: 'cpu' | 'mem' | 'none') {
+  if (kind === 'none') return {
+    from, to, hasData: true, avgCpu: 21, peakCpu: 34, avgMem: 71, peakMem: 73, kinds: [],
+    verdict: 'Перегрузки не видно: процессор в среднем 21% (пик 34%), память 73%. Причина могла быть там, куда агент не смотрит: видеокарта, перегрев и сброс частоты, ожидание диска или сети, зависшее окно программы.',
+    details: [], culprits: [{ app: 'chrome.exe', cpu: 9, cpuUsual: 7, mem: 3.1 * GB, memGrowth: 0, io: 0, hint: null }], started: [],
+  };
+  if (kind === 'mem') return {
+    from, to, hasData: true, avgCpu: 38, peakCpu: 52, avgMem: 91, peakMem: 94, kinds: ['mem'],
+    verdict: 'Не хватало ресурсов: память. Главный виновник — vmmem (виртуальная машина (WSL или Docker)).',
+    details: [
+      'Память была заполнена на 94%. В таком состоянии Windows выгружает данные программ на диск, и всё начинает отвечать с задержкой. Больше всего памяти держали: vmmem (виртуальная машина (WSL или Docker)) — 8,2 ГБ, chrome.exe — 4,6 ГБ, devenv.exe — 2,1 ГБ.',
+      'vmmem вырос на 3,4 ГБ за полчаса до этого.',
+    ],
+    culprits: [
+      { app: 'vmmem', cpu: 12, cpuUsual: 4, mem: 8.2 * GB, memGrowth: 3.4 * GB, io: 0, hint: 'виртуальная машина (WSL или Docker)' },
+      { app: 'chrome.exe', cpu: 8, cpuUsual: 7, mem: 4.6 * GB, memGrowth: 0.2 * GB, io: 0, hint: null },
+      { app: 'devenv.exe', cpu: 3, cpuUsual: 2, mem: 2.1 * GB, memGrowth: 0, io: 0, hint: null },
+    ],
+    started: [{ app: 'docker.exe', ts: from - 60, hint: null }],
+  };
+  return {
+    from, to, hasData: true, avgCpu: 81, peakCpu: 96, avgMem: 78, peakMem: 81, kinds: ['cpu', 'io'],
+    verdict: 'Не хватало ресурсов: процессор и диск. Главный виновник — MsMpEng.exe (проверка Защитником Windows).',
+    details: [
+      'Процессор был занят на 96% (в среднем 81%). Больше всего его загружали: MsMpEng.exe (проверка Защитником Windows) — 41%, TiWorker.exe (установка обновлений Windows) — 22%, chrome.exe — 9%.',
+      'MsMpEng.exe обычно берёт около 1%, здесь — 41%: это всплеск, а не постоянный фон.',
+      'Активно читали и писали данные: MsMpEng.exe (проверка Защитником Windows) — 84 МБ/с. Если диск жёсткий (HDD), такой поток сам по себе тормозит остальные программы.',
+      'Незадолго до этого запустились: TiWorker.exe (установка обновлений Windows), MoUsoCoreWorker.exe (Центр обновления Windows).',
+    ],
+    culprits: [
+      { app: 'MsMpEng.exe', cpu: 41, cpuUsual: 1, mem: 0.4 * GB, memGrowth: 0, io: 84 * MB, hint: 'проверка Защитником Windows' },
+      { app: 'TiWorker.exe', cpu: 22, cpuUsual: 0, mem: 0.3 * GB, memGrowth: 0, io: 12 * MB, hint: 'установка обновлений Windows' },
+      { app: 'chrome.exe', cpu: 9, cpuUsual: 7, mem: 3.4 * GB, memGrowth: 0, io: 0, hint: null },
+    ],
+    started: [
+      { app: 'TiWorker.exe', ts: from - 120, hint: 'установка обновлений Windows' },
+      { app: 'MoUsoCoreWorker.exe', ts: from - 100, hint: 'Центр обновления Windows' },
+    ],
+  };
+}
+
+function reportMock(days: number) {
+  const t = now(), from = t - days * 86400, step = days > 2 ? 3600 : 600;
+  const points = [];
+  for (let x = from - from % step; x < t; x += step) {
+    const h = new Date(x * 1000).getHours();
+    const night = h < 8;
+    points.push({ ts: x, cpu: night ? 4 + Math.random() * 3 : 18 + Math.random() * 22, mem: night ? 55 : 68 + Math.random() * 14 });
+  }
+  const app = (name: string, cpu: number, mem: number, io: number, net: number) => ({ name, cpu, mem, io, net });
+  return {
+    from, to: t, hours: days * 24 * 0.82, avgCpu: 17.4, peakCpu: 97, avgMem: 69, peakMem: 94,
+    netTx: 3.2 * GB, netRx: 41.7 * GB, ioRead: 212 * GB, ioWrite: 96 * GB, points,
+    topCpu: [app('chrome.exe', 6.1, 4.6 * GB, 22 * GB, 30 * GB), app('devenv.exe', 3.4, 2.1 * GB, 9 * GB, 0.2 * GB), app('MsMpEng.exe', 1.9, 0.4 * GB, 61 * GB, 0), app('dwm.exe', 1.2, 0.3 * GB, 0, 0), app('Telegram.exe', 0.6, 0.5 * GB, 1 * GB, 2.1 * GB)],
+    topMem: [app('vmmem', 1.1, 8.2 * GB, 4 * GB, 1 * GB), app('chrome.exe', 6.1, 4.6 * GB, 22 * GB, 30 * GB), app('devenv.exe', 3.4, 2.1 * GB, 9 * GB, 0.2 * GB)],
+    topIo: [app('MsMpEng.exe', 1.9, 0.4 * GB, 61 * GB, 0), app('chrome.exe', 6.1, 4.6 * GB, 22 * GB, 30 * GB), app('SearchIndexer.exe', 0.4, 0.1 * GB, 18 * GB, 0)],
+    topNet: [app('chrome.exe', 6.1, 4.6 * GB, 22 * GB, 30 * GB), app('steam.exe', 0.3, 0.3 * GB, 9 * GB, 7.4 * GB), app('Telegram.exe', 0.6, 0.5 * GB, 1 * GB, 2.1 * GB)],
+    episodes: [whyMock(t - 3 * 3600, t - 3 * 3600 + 420, 'cpu'), whyMock(t - 30 * 3600, t - 30 * 3600 + 960, 'mem')],
+    slowMinutes: 23,
+    anomalies: [{ rule: 'new_domain', count: 14 }, { rule: 'new_program', count: 5 }, { rule: 'exposed_port', count: 2 }, { rule: 'unsigned_net', count: 1 }],
+    notable: [{ id: 1, ts: t - 7200, rule: 'unsigned_net', severity: 'high', app: 'sideloadlydaemon.exe', title: 'Программа без подписи выходит в сеть', detail: '', seen: true }],
+    newPrograms: ['ollama.exe', 'Sideloadly.exe', 'node.exe', 'rufus-4.6.exe', 'OBS64.exe'],
+    systemDrive: { root: 'C:\\', total: 476 * GB, free: 61 * GB },
+    diskGrowth: { since: t - 7 * 86400, driveDelta: 18.6 * GB, items: [
+      { path: 'C:\\Users\\ANTRARES\\.ollama\\models', size: 9.1 * GB, delta: 9.1 * GB, isNew: true },
+      { path: 'C:\\Users\\ANTRARES\\AppData\\Local\\Docker', size: 41 * GB, delta: 5.2 * GB, isNew: false },
+      { path: 'C:\\Windows\\SoftwareDistribution', size: 6.3 * GB, delta: 2.4 * GB, isNew: false },
+    ] },
+  };
+}
+
 function anomalies() {
   const t = now();
   const items = [
@@ -352,6 +423,9 @@ export function mockApi(req: IncomingMessage, res: ServerResponse, next: () => v
       case '/api/anomalies/seen': return true;
       case '/api/disk': return diskState(u.searchParams.get('root'));
       case '/api/connections': return connections();
+      case '/api/report': return reportMock(Number(u.searchParams.get('days') ?? 7));
+      case '/api/report/export': return { ok: true, path: 'C:\\Users\\ANTRARES\\Documents\\SysWatch\\Отчёт SysWatch 2026-10-16 — 2026-10-23 10-40.html' };
+      case '/api/why': { const f = Number(u.searchParams.get('from')); return whyMock(f, Number(u.searchParams.get('to')), 'none'); }
       case '/api/system/startup': return [
         { id: 'a', name: 'Telegram Desktop', where: 'Для этого пользователя', command: '"C:\\Users\\ANTRARES\\AppData\\Roaming\\Telegram Desktop\\Telegram.exe" -autostart', path: 'C:\\Telegram.exe', enabled: true, signature: 'signed', signer: 'Telegram FZ-LLC', canToggle: true },
         { id: 'b', name: 'Sideloadly', where: 'Для этого пользователя', command: '"C:\\Users\\ANTRARES\\AppData\\Local\\Sideloadly\\sideloadlydaemon.exe"', path: 'C:\\sideloadlydaemon.exe', enabled: true, signature: 'unsigned', signer: null, canToggle: true },

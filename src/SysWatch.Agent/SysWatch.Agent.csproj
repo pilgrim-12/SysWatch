@@ -13,6 +13,8 @@
     <ServerGarbageCollection>false</ServerGarbageCollection>
     <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
     <TieredPGO>true</TieredPGO>
+    <!-- Код компилируется заранее при публикации: агент не тратит процессор на JIT после каждого запуска -->
+    <PublishReadyToRun>true</PublishReadyToRun>
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 

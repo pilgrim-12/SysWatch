@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Net;
+using System.Runtime.InteropServices;
 
 namespace SysWatch.Agent.Pipeline;
 
@@ -24,6 +25,28 @@ public sealed class ConnCounters
     public long Tx;
     public long Rx;
     public long Connects;
+}
+
+/// <summary>
+/// Ключ сетевого счётчика без выделения памяти: PID, адрес (IPv4 — в Lo, IPv6 — Hi+Lo), порт, протокол.
+/// Нужен для горячего пути ETW: на каждое событие TCP/UDP не создаём ни IPAddress, ни других объектов.
+/// </summary>
+public readonly record struct NetKey(int Pid, ulong Hi, ulong Lo, ushort Port, Proto Proto, bool V6)
+{
+    public IPAddress ToIp()
+    {
+        if (!V6) return new IPAddress((long)(uint)Lo);
+        Span<byte> b = stackalloc byte[16];
+        BitConverter.TryWriteBytes(b, Hi);
+        BitConverter.TryWriteBytes(b[8..], Lo);
+        var ip = new IPAddress(b);
+        return ip.IsIPv4MappedToIPv6 ? ip.MapToIPv4() : ip;
+    }
+}
+
+public struct NetVal
+{
+    public long Tx, Rx, Connects;
 }
 
 public sealed record DnsRecord(long Ts, ProcInfo Proc, string Domain, string? Results);
@@ -56,18 +79,49 @@ public sealed class Aggregator
     /// <summary>Кэш «IP → домен» из DNS-ответов, чтобы подписывать соединения.</summary>
     public ConcurrentDictionary<IPAddress, string> IpToDomain { get; } = new();
 
+    // Сетевые события копятся в обычном словаре под одной блокировкой (пишет один поток ETW),
+    // а в объекты процессов и адресов превращаются только раз в минуту при сбросе.
+    private readonly object _netGate = new();
+    private Dictionary<NetKey, NetVal> _net = new(4096);
+    private Dictionary<NetKey, NetVal> _netSpare = new(4096);
+
     public MinuteBucket Current => Volatile.Read(ref _current);
 
-    public MinuteBucket Swap() => Interlocked.Exchange(ref _current, new MinuteBucket());
-
-    public void ProcStarted(ProcInfo p) => Current.Started.Enqueue(p);
-
-    public void ProcStopped(ProcInfo p) => Current.Stopped.Enqueue(p);
-
-    public void AddNet(ProcInfo p, IPAddress ip, int port, Proto proto, long tx, long rx, bool connect)
+    /// <summary>Забрать накопленное за интервал. procOf — процесс по PID на момент сброса.</summary>
+    public MinuteBucket Swap(Func<int, ProcInfo> procOf)
     {
-        var b = Current;
+        var old = Interlocked.Exchange(ref _current, new MinuteBucket());
 
+        Dictionary<NetKey, NetVal> net;
+        lock (_netGate)
+        {
+            net = _net;
+            _net = _netSpare;
+        }
+
+        foreach (var (k, v) in net)
+            AddNetTo(old, procOf(k.Pid), k.ToIp(), k.Port, k.Proto, v.Tx, v.Rx, v.Connects);
+
+        net.Clear();
+        if (net.EnsureCapacity(0) > 65536) net = new Dictionary<NetKey, NetVal>(4096); // не держим огромный словарь после всплеска
+        lock (_netGate) _netSpare = net;
+        return old;
+    }
+
+    /// <summary>Горячий путь: одно событие TCP/UDP. Без выделений памяти.</summary>
+    public void AddNetFast(in NetKey key, long tx, long rx, bool connect)
+    {
+        lock (_netGate)
+        {
+            ref var v = ref CollectionsMarshal.GetValueRefOrAddDefault(_net, key, out _);
+            v.Tx += tx;
+            v.Rx += rx;
+            if (connect) v.Connects++;
+        }
+    }
+
+    private static void AddNetTo(MinuteBucket b, ProcInfo p, IPAddress ip, int port, Proto proto, long tx, long rx, long connects)
+    {
         var pc = b.Procs.GetOrAdd(p, static _ => new ProcCounters());
         if (tx != 0) Interlocked.Add(ref pc.NetTx, tx);
         if (rx != 0) Interlocked.Add(ref pc.NetRx, rx);
@@ -75,8 +129,16 @@ public sealed class Aggregator
         var cc = b.Conns.GetOrAdd(new ConnKey(p, ip, port, proto), static _ => new ConnCounters());
         if (tx != 0) Interlocked.Add(ref cc.Tx, tx);
         if (rx != 0) Interlocked.Add(ref cc.Rx, rx);
-        if (connect) Interlocked.Increment(ref cc.Connects);
+        if (connects != 0) Interlocked.Add(ref cc.Connects, connects);
     }
+
+    public void ProcStarted(ProcInfo p) => Current.Started.Enqueue(p);
+
+    public void ProcStopped(ProcInfo p) => Current.Stopped.Enqueue(p);
+
+    /// <summary>Медленный путь (запасной, если быстрый разбор события недоступен).</summary>
+    public void AddNet(ProcInfo p, IPAddress ip, int port, Proto proto, long tx, long rx, bool connect) =>
+        AddNetTo(Current, p, ip.IsIPv4MappedToIPv6 ? ip.MapToIPv4() : ip, port, proto, tx, rx, connect ? 1 : 0);
 
     public void AddSample(ProcInfo p, long cpuMs, long workingSet, long ioRead, long ioWrite)
     {

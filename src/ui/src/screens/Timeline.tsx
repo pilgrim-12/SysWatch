@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api } from '../api';
+import { api, type Why } from '../api';
+import { WhyCard } from '../components/WhyCard';
 import { useLoad } from '../hooks';
 import { COLOR, RANGES, appLabel, bytes, dayTime, pct } from '../format';
 import { Plot } from '../components/Plot';
@@ -37,6 +38,15 @@ export function Timeline({ range, setRange, onApp }: { range: number; setRange: 
   }, [data, metric]);
 
   const idx = data && picked != null ? data.minutes.indexOf(picked) : -1;
+  const [why, setWhy] = useState<{ at: number; data: Why | null } | null>(null);
+  const explain = async () => {
+    if (picked == null || !data) return;
+    const bin = data.minutes.length > 1 ? data.minutes[1] - data.minutes[0] : 60;
+    const at = picked;
+    setWhy({ at, data: null });
+    try { const w = await api.why(at - 120, at + Math.max(bin, 60) + 120); setWhy(cur => cur?.at === at ? { at, data: w } : cur); }
+    catch { setWhy(null); }
+  };
   const snapshot = useMemo(() => {
     if (!data || idx < 0) return null;
     return data.apps
@@ -112,6 +122,11 @@ export function Timeline({ range, setRange, onApp }: { range: number; setRange: 
                     ))}
                   </tbody>
                 </table>
+                <div style={{ marginTop: 12 }}>
+                  {why?.at === picked && why.data
+                    ? <WhyCard why={why.data} onApp={onApp} />
+                    : <button className="btn" disabled={why?.at === picked} onClick={explain}>{why?.at === picked ? 'Разбираю…' : 'Почему тормозило?'}</button>}
+                </div>
               </>
             )}
           </div>

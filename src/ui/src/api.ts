@@ -248,7 +248,69 @@ async function get<T>(path: string): Promise<T> {
   return r.json() as Promise<T>;
 }
 
+
+// ── Отчёты и «Почему тормозило?» ──
+
+export interface Culprit {
+  app: string;
+  cpu: number;        // % всех ядер в среднем за отрезок
+  cpuUsual: number;   // то же за полчаса до
+  mem: number;        // пик частной памяти, байты
+  memGrowth: number;
+  io: number;         // байт/с чтения и записи
+  hint: string | null;
+}
+
+export interface StartedProc { app: string; ts: number; hint: string | null }
+
+export interface Why {
+  from: number;
+  to: number;
+  hasData: boolean;
+  avgCpu: number;
+  peakCpu: number;
+  avgMem: number;
+  peakMem: number;
+  kinds: ('cpu' | 'mem' | 'io')[];
+  verdict: string;
+  details: string[];
+  culprits: Culprit[];
+  started: StartedProc[];
+}
+
+export interface ReportApp { name: string; cpu: number; mem: number; io: number; net: number }
+
+export interface Report {
+  from: number;
+  to: number;
+  hours: number;
+  avgCpu: number;
+  peakCpu: number;
+  avgMem: number;
+  peakMem: number;
+  netTx: number;
+  netRx: number;
+  ioRead: number;
+  ioWrite: number;
+  points: { ts: number; cpu: number | null; mem: number | null }[];
+  topCpu: ReportApp[];
+  topMem: ReportApp[];
+  topIo: ReportApp[];
+  topNet: ReportApp[];
+  episodes: Why[];
+  slowMinutes: number;
+  anomalies: { rule: string; count: number }[];
+  notable: Anomaly[];
+  newPrograms: string[];
+  systemDrive: { root: string; total: number; free: number } | null;
+  diskGrowth: { since: number | null; driveDelta: number; items: { path: string; size: number; delta: number; isNew: boolean }[] } | null;
+}
+
 export const api = {
+  report: (days: number) => get<Report>(`/api/report?days=${days}`),
+  reportExport: (days: number) => postJson<{ ok: boolean; path: string }>(`/api/report/export?days=${days}`),
+  why: (from: number, to: number) => get<Why>(`/api/why?from=${from}&to=${to}`),
+  slowdowns: (range: number) => get<Why[]>(`/api/slowdowns?range=${range}`),
   live: () => get<Live>('/api/live'),
   overview: (range: number) => get<Overview>(`/api/overview?range=${range}`),
   timeline: (range: number) => get<Timeline>(`/api/timeline?range=${range}`),
