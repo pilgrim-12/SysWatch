@@ -11,7 +11,8 @@ public sealed record StorageInfo(string Dir, long Bytes, int Days, long? Oldest,
 
 public sealed record SettingsView(int RetentionDays, int DetailDays, AlertSettings Alerts, StorageInfo Storage);
 
-public sealed record SettingsUpdate(int? RetentionDays, int? DetailDays, AlertSettings? Alerts);
+/// <param name="HomeCountry">Страна для карты (ISO); пустая строка — снова брать из настроек Windows.</param>
+public sealed record SettingsUpdate(int? RetentionDays, int? DetailDays, AlertSettings? Alerts, string? HomeCountry = null);
 
 /// <summary>
 /// Настройки SysWatch в C:\ProgramData\SysWatch\settings.json. Этот же файл читает агент (срок хранения),
@@ -65,6 +66,19 @@ public sealed class AppSettings(DayFiles files)
         }
     }
 
+    /// <summary>Страна, выбранная пользователем на карте; null — не выбрана (тогда берётся настройка Windows).</summary>
+    public string? HomeCountry
+    {
+        get
+        {
+            lock (_gate)
+            {
+                var v = Read<string?>(Load(), "homeCountry", null);
+                return v is { Length: 2 } ? v.ToUpperInvariant() : null;
+            }
+        }
+    }
+
     public SettingsView View()
     {
         lock (_gate)
@@ -86,6 +100,12 @@ public sealed class AppSettings(DayFiles files)
                 r = Math.Clamp(r, 7, 3650);
                 o["retentionDays"] = r;
                 o["detailDays"] = Math.Min(30, r);
+            }
+            if (u.HomeCountry is { } hc)
+            {
+                hc = hc.Trim().ToUpperInvariant();
+                if (hc.Length == 2 && char.IsLetter(hc[0]) && char.IsLetter(hc[1])) o["homeCountry"] = hc;
+                else o.Remove("homeCountry");
             }
             if (u.DetailDays is int d) o["detailDays"] = Math.Clamp(d, 1, Read(o, "retentionDays", 90));
             if (u.Alerts is { } a)

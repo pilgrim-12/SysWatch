@@ -404,7 +404,13 @@ export const errorText = (e: unknown) => {
   try { const v = JSON.parse(m); return typeof v === 'string' ? v : m; } catch { return m; }
 };
 
+export interface GeoCountry { code: string; tx: number; rx: number; connects: number; ips: number; apps: { name: string; bytes: number }[]; domains: string[] }
+export interface GeoFlow { app: string; dest: string; ip: string; country: string | null; tx: number; rx: number; connects: number }
+export interface GeoView { from: number; home: string | null; homeManual: boolean; geoAvailable: boolean; geoStatus: string | null; countries: GeoCountry[]; flows: GeoFlow[]; unknownBytes: number; lanBytes: number }
+
 export const api = {
+  geo: (range: number) => get<GeoView>(`/api/geo?range=${range}`),
+  geoHome: () => get<{ home: string | null }>('/api/geo/home'),
   settings: () => get<SettingsView>('/api/settings'),
   saveSettings: (u: SettingsUpdate) => postBody<SettingsView>('/api/settings', u),
   updates: (refresh = false) => get<UpdatesView>(`/api/updates${refresh ? '?refresh=1' : ''}`),

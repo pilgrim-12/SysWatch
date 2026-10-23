@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { ConnMap } from '../components/ConnMap';
 import { api, type BlockedApp, type ConnRow, type ConnSnapshot } from '../api';
 import { appLabel, countryName, dayTime } from '../format';
 import { useLoad } from '../hooks';
@@ -39,6 +40,8 @@ export function Connections({ onApp }: { onApp: (name: string) => void }) {
   const [paused, setPaused] = useState(false);
   const [onlyExposed, setOnlyExposed] = useState(false);
   const [geoBusy, setGeoBusy] = useState(false);
+  const [view, setView] = useState<'table' | 'map'>(() => { try { return localStorage.getItem('conn_view') === 'map' ? 'map' : 'table'; } catch { return 'table'; } });
+  const switchView = (v: 'table' | 'map') => { setView(v); try { localStorage.setItem('conn_view', v); } catch { /* не страшно */ } };
   const blocked = useLoad(() => api.blocked(), [], 30_000);
 
   useEffect(() => {
@@ -118,7 +121,13 @@ export function Connections({ onApp }: { onApp: (name: string) => void }) {
           <input type="checkbox" checked={onlyExposed} onChange={e => setOnlyExposed(e.target.checked)} />
           {t('Только доступное из сети')}
         </label>
+        <div className="seg" role="group" aria-label={t('Вид')} style={{ marginLeft: 'auto' }}>
+          <button aria-pressed={view === 'table'} onClick={() => switchView('table')}>{t('Таблица')}</button>
+          <button aria-pressed={view === 'map'} onClick={() => switchView('map')}>{t('Карта')}</button>
+        </div>
       </div>
+
+      {view === 'map' ? <ConnMap rows={rows} onApp={onApp} /> : (
 
       <div className="panel scroll" style={{ maxHeight: 'calc(100vh - 420px)', minHeight: 320 }}>
         {!rows.length ? <div className="empty">{snap ? t('Нет соединений под этот фильтр.') : t('Загружаю…')}</div> : (
@@ -172,6 +181,7 @@ export function Connections({ onApp }: { onApp: (name: string) => void }) {
           </table>
         )}
       </div>
+      )}
 
       {(blocked.data?.length ?? 0) > 0 && (
         <section className="block" style={{ marginTop: 24 }}>

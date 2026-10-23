@@ -600,7 +600,7 @@ function connections() {
     local: dir === 'listen' ? remote : '192.168.1.10', localPort: dir === 'listen' ? [1433, 27017, 5353, 26750][i - 9] ?? 0 : dir === 'in' ? 1433 : 50000 + i,
     remote: dir === 'listen' ? '0.0.0.0' : remote, remotePort: rport, domain, state,
     firstSeen: t - (i === 5 ? 1 : 30 + i * 140), closedAt: i === 7 ? t - 2 : null,
-    exposed: dir !== 'out' && remote !== '127.0.0.1', country: dir === 'out' ? ['US', 'US', 'US', 'NL', 'IE', 'US', 'US', 'DE'][i] ?? null : dir === 'in' ? 'LAN' : null,
+    exposed: dir !== 'out' && remote !== '127.0.0.1', country: dir === 'out' ? ['US', 'US', 'US', 'NL', 'IE', 'US', 'US', 'DE'][i] ?? null : dir === 'in' ? (i % 2 ? 'LAN' : 'NL') : null,
   }));
   return { ts: t, rows, out: 7, in: 1, listen: 4, exposed: 2, geoAvailable: true, geoStatus: null };
 }
@@ -669,6 +669,7 @@ export function mockApi(req: IncomingMessage, res: ServerResponse, next: () => v
       case '/api/anomalies/seen': return true;
       case '/api/disk': return diskState(u.searchParams.get('root'));
       case '/api/connections': return connections();
+      case '/api/geo/home': return { home: 'GE' };
       case '/api/dev': return devMock();
       case '/api/gpu': return gpuMock(range);
       case '/api/system/crashes': return crashMock(Number(u.searchParams.get('days') ?? 30));
@@ -686,6 +687,39 @@ export function mockApi(req: IncomingMessage, res: ServerResponse, next: () => v
         { name: 'Docker Desktop', id: 'Docker.DockerDesktop', version: '4.33.1', available: '4.35.1', source: 'winget' },
       ], job: { running: true, current: 'Google.Chrome', done: ['7zip.7zip'], failed: [], log: null } };
       case '/api/updates/install': return true;
+      case '/api/geo': {
+        const C = (code: string, mb: number, apps: string[], domains: string[]) => ({ code, tx: mb * 1e6 * 0.15, rx: mb * 1e6 * 0.85, connects: Math.round(mb * 3), ips: Math.max(1, Math.round(mb / 40)), apps: apps.map((n, i) => ({ name: n, bytes: mb * 1e6 / (i + 1.5) })), domains });
+        return { from: now() - 86400, home: 'GE', geoAvailable: true, geoStatus: null, unknownBytes: 42e6, lanBytes: 120e6, countries: [
+          C('US', 2400, ['chrome.exe', 'Code.exe', 'Teams.exe'], ['www.youtube.com', 'github.com', 'api.openai.com']),
+          C('DE', 860, ['chrome.exe', 'Telegram.exe'], ['web.telegram.org', 'hetzner.com']),
+          C('NL', 520, ['msedge.exe', 'svchost.exe'], ['login.microsoftonline.com', 'update.microsoft.com']),
+          C('IE', 310, ['OneDrive.exe'], ['onedrive.live.com']),
+          C('GE', 190, ['chrome.exe'], ['myhome.ge', 'tbcbank.ge']),
+          C('SG', 95, ['Discord.exe'], ['discord.gg']),
+          C('FI', 80, ['chrome.exe'], ['googlevideo.com']),
+          C('TR', 60, ['WhatsApp.Root.exe'], ['web.whatsapp.com']),
+          C('GB', 54, ['Spotify.exe'], ['spotify.com']),
+          C('FR', 31, ['chrome.exe'], ['ovh.net']),
+          C('JP', 12, ['steam.exe'], ['steamcontent.com']),
+          C('UA', 9, ['Telegram.exe'], ['rozetka.com.ua']),
+          C('BR', 4, ['chrome.exe'], ['globo.com']),
+          C('AU', 2, ['chrome.exe'], ['abc.net.au']),
+          C('IN', 1.5, ['chrome.exe'], ['akamai.net']),
+          C('CA', 1, ['chrome.exe'], ['cbc.ca']),
+        ], flows: [
+          { app: 'chrome.exe', dest: 'rr3---sn-4g5e6nsz.googlevideo.com', ip: '173.194.182.8', country: 'US', tx: 22e6, rx: 1.4e9, connects: 120 },
+          { app: 'chrome.exe', dest: 'web.telegram.org', ip: '149.154.167.99', country: 'DE', tx: 41e6, rx: 380e6, connects: 60 },
+          { app: 'Telegram.exe', dest: '149.154.167.51', ip: '149.154.167.51', country: 'DE', tx: 96e6, rx: 230e6, connects: 14 },
+          { app: 'OneDrive.exe', dest: 'onedrive.live.com', ip: '13.107.42.13', country: 'IE', tx: 180e6, rx: 21e6, connects: 40 },
+          { app: 'Code.exe', dest: 'api.github.com', ip: '140.82.121.6', country: 'US', tx: 4.1e6, rx: 18e6, connects: 30 },
+          { app: 'Code.exe', dest: 'marketplace.visualstudio.com', ip: '13.107.6.175', country: 'NL', tx: 0.6e6, rx: 40e6, connects: 8 },
+          { app: 'msedge.exe', dest: 'login.microsoftonline.com', ip: '20.190.159.4', country: 'NL', tx: 1.2e6, rx: 3e6, connects: 22 },
+          { app: 'svchost.exe', dest: 'download.windowsupdate.com', ip: '2.21.20.40', country: 'NL', tx: 0.4e6, rx: 198e6, connects: 6 },
+          { app: 'WhatsApp.Root.exe', dest: 'web.whatsapp.com', ip: '157.240.9.53', country: 'TR', tx: 9e6, rx: 38e6, connects: 18 },
+          { app: 'Discord.exe', dest: 'gateway.discord.gg', ip: '162.159.135.234', country: 'SG', tx: 3e6, rx: 60e6, connects: 9 },
+          { app: 'chrome.exe', dest: 'cdn.taboola.com', ip: '151.101.1.44', country: 'IL', tx: 0.18e6, rx: 0.3e6, connects: 8 },
+        ] };
+      }
       case '/api/health': return healthMock();
       case '/api/report/templates': return TEMPLATES;
       case '/api/report/doc': { const t = u.searchParams.get('template') ?? 'health'; return { template: t, title: t, html: docHtml(t) }; }

@@ -125,8 +125,19 @@ public sealed class ReportCenter(
         var crashes = Crashes.List(30);
         d.H2(L.T("Сбои за 30 дней"), null);
         if (crashes.Items.Count == 0) d.P(L.T("Сбоев не найдено."));
-        else d.Table([L.T("Когда"), L.T("Что"), L.T("Подробно")], [],
-            crashes.Items.Take(40).Select(c => new[] { When(c.Ts), c.Title + (c.App is null ? "" : $" — {c.App}"), c.Detail }));
+        else
+        {
+            // Сначала — какие программы падают чаще всего, потом подробный список.
+            var byApp = crashes.Items.Where(c => c.App is not null && c.Kind is "app" or "hang")
+                .GroupBy(c => c.App!, StringComparer.OrdinalIgnoreCase)
+                .Select(g => (App: g.Key, Crashes: g.Count(c => c.Kind == "app"), Hangs: g.Count(c => c.Kind == "hang"), Last: g.Max(c => c.Ts)))
+                .OrderByDescending(x => x.Crashes + x.Hangs).Take(10).ToList();
+            if (byApp.Count > 0)
+                d.Table([L.T("Программа"), L.T("Падений"), L.T("Зависаний"), L.T("Последний раз")], [1, 2],
+                    byApp.Select(x => new[] { x.App, x.Crashes.ToString(), x.Hangs.ToString(), When(x.Last) }));
+            d.Table([L.T("Когда"), L.T("Программа"), L.T("Что"), L.T("Подробно")], [],
+                crashes.Items.Take(40).Select(c => new[] { When(c.Ts), c.App ?? "—", c.Title, c.Detail }));
+        }
 
         long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var slow = insights.SlowDowns(now - 7 * 86400, now, 6);

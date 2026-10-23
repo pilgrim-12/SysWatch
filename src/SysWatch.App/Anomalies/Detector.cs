@@ -98,6 +98,20 @@ public sealed class Detector(DayFiles files, Signatures signatures, AnomalyStore
         p.Contains(@"\Windows\Temp\", StringComparison.OrdinalIgnoreCase) ||
         p.Contains(@"\Downloads\", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Установщик самого SysWatch: Inno Setup распаковывает себя в Temp\is-XXXX.tmp\SysWatch-Setup-1.2.3.tmp и запускается оттуда,
+    /// а скачанный установщик лежит в «Загрузках». Свою установку аномалией не считаем.
+    /// </summary>
+    private static bool IsOwnInstaller(string path)
+    {
+        var name = Path.GetFileName(path);
+        if (!name.StartsWith("SysWatch-Setup-", StringComparison.OrdinalIgnoreCase)) return false;
+        if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) return true;
+        var dir = Path.GetFileName(Path.GetDirectoryName(path) ?? "");
+        return name.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase)
+               && dir.StartsWith("is-", StringComparison.OrdinalIgnoreCase) && dir.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase);
+    }
+
     private void NewProcesses(SqliteConnection c, long since, List<Anomaly> found)
     {
         var rows = c.Cmd("""
@@ -110,7 +124,7 @@ public sealed class Detector(DayFiles files, Signatures signatures, AnomalyStore
 
         foreach (var p in rows)
         {
-            if (p.Path.StartsWith(OwnDir, StringComparison.OrdinalIgnoreCase)) continue;
+            if (p.Path.StartsWith(OwnDir, StringComparison.OrdinalIgnoreCase) || IsOwnInstaller(p.Path)) continue;
 
             if (IsTempPath(p.Path))
                 Add(found, p.Ts, "temp_exec", "medium", p.Image,

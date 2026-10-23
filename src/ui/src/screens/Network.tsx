@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { api } from '../api';
 import { useLoad, useSort } from '../hooks';
+import { GeoSection } from '../components/GeoSection';
 import { RANGES, appLabel, bytes, dayTime } from '../format';
 import { t } from '../i18n';
 
@@ -51,6 +52,8 @@ export function Network({ range, setRange, onApp }: { range: number; setRange: (
           <div className="fact"><b>{d.totals.apps}</b><span>{t('программ выходило в сеть')}</span></div>
         </div>
       )}
+
+      <GeoSection range={range} onApp={onApp} />
 
       <section className="block">
         <h2>{t('Потоки')} <small>{t('программа и адрес; светлая часть полосы — получено, тёмная — отправлено')}</small></h2>

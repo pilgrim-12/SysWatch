@@ -240,11 +240,14 @@ export function History() {
       <p className="hint-line">{t('Режим инкогнито браузеры не записывают — его здесь нет. Ссылки открываются в браузере по умолчанию.')}{' '}
         {t('Удаление действует на этот компьютер: если в браузере включена синхронизация, история в аккаунте Google, Microsoft или Firefox остаётся — её чистят в настройках аккаунта.')}</p>
       {kind !== 'domains' && selected.size > 0 && (
+          <>
+          <div style={{ height: 72 }} aria-hidden />{/* место под закреплённую панель, чтобы она не закрывала последние строки */}
           <div className="sel-bar floating">
             <span>{t('Выбрано: {0}', selected.size)}</span>
             <button className="btn danger" disabled={busy} onClick={() => remove({ items: [...selected.values()] }, t('выбранные записи ({0})', selected.size))}>{busy ? t('Удаляю…') : t('Удалить из истории')}</button>
             <button className="link dim" onClick={() => setSelected(new Map())}>{t('Снять выбор')}</button>
           </div>
+          </>
         )}
     </>
   );

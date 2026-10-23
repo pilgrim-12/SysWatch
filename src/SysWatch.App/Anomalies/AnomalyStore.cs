@@ -42,6 +42,14 @@ public sealed class AnomalyStore
             while (r.Read()) if (r.GetString(1) == "args") hasArgs = true;
         }
         if (!hasArgs) Exec(c, "ALTER TABLE anomaly ADD COLUMN args TEXT");
+
+        // Ложные срабатывания прошлых версий: установщик самого SysWatch (распаковывается во временную папку)
+        // и приложения Microsoft Store, подписанные пакетом, а не внутри exe.
+        Exec(c, """
+            DELETE FROM anomaly
+            WHERE (rule IN ('temp_exec', 'new_program') AND app LIKE 'SysWatch-Setup-%')
+               OR (rule = 'unsigned_net' AND key LIKE '%\WindowsApps\%')
+            """);
     }
 
     /// <summary>Перевести шаблон на текущий язык. Аргументы тоже пробуем перевести: это могут быть подписи вроде «Служба».</summary>
