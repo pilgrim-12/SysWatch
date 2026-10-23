@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { api, errorText, type AiAnswer, type Finding, type HealthReport } from '../api';
+import { useMemo } from 'react';
+import { api, type Finding, type HealthReport } from '../api';
 import { useLoad } from '../hooks';
 import { COLOR, ago, bytes, pct } from '../format';
 import { Plot } from '../components/Plot';
@@ -117,8 +117,6 @@ export function Overview() {
             )}
           </section>
 
-          <AiExplain />
-
           <section className="block">
             <h2>{t('Нагрузка за сутки')} <small>{t('по 10 минут')}</small></h2>
             <div className="panel chart-box">
@@ -141,34 +139,5 @@ function Fact({ value, label, color }: { value: string; label: string; color?: s
       <b style={{ color }}>{value}</b>
       <span>{label}</span>
     </div>
-  );
-}
-
-/** «Объяснить простыми словами» — только если пользователь сам включил локальный ИИ в настройках. */
-function AiExplain() {
-  const [enabled, setEnabled] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [answer, setAnswer] = useState<AiAnswer | null>(null);
-  useEffect(() => { api.settings().then(s => setEnabled(s.ai.enabled)).catch(() => {}); }, []);
-  if (!enabled) return null;
-
-  const ask = async () => {
-    setBusy(true); setAnswer(null);
-    try { setAnswer(await api.aiExplain()); }
-    catch (e) { setAnswer({ ok: false, text: errorText(e), model: null }); }
-    finally { setBusy(false); }
-  };
-
-  return (
-    <section className="block">
-      <h2>{t('Простыми словами')} <small>{t('локальный ИИ, без интернета')}</small></h2>
-      <div className="panel ai-card">
-        {!answer && !busy && <p className="dim">{t('Модель на этом компьютере прочитает оценку и найденные проблемы и объяснит, что важнее всего.')}</p>}
-        {busy && <p className="dim">{t('Модель думает… На слабом компьютере это до минуты.')}</p>}
-        {answer && <div className={answer.ok ? 'ai-text' : 'error'}>{answer.text}</div>}
-        {answer?.model && <div className="hint-line" style={{ margin: '8px 0 0' }}>{t('Модель: {0}', answer.model)}</div>}
-        <div style={{ marginTop: 10 }}><button className="btn" disabled={busy} onClick={ask}>{answer ? t('Спросить ещё раз') : t('Объяснить')}</button></div>
-      </div>
-    </section>
   );
 }

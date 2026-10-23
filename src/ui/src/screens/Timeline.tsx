@@ -21,7 +21,23 @@ export function Timeline({ range, setRange, onApp }: { range: number; setRange: 
   const tl = useLoad(() => api.timeline(range), [range], 60_000);
   const m = METRICS.find(x => x.key === metric)!;
 
-  const data = tl.data;
+  // Если агент работает меньше выбранного периода — начинаем график с первой записанной минуты, без пустой половины.
+  const { data, since } = useMemo(() => {
+    const d = tl.data;
+    if (!d) return { data: null, since: null as number | null };
+    const first = d.minutes.findIndex((_, i) => d.system.cpu[i] != null || d.system.mem[i] != null);
+    if (first <= 0) return { data: d, since: null };
+    const cut = Math.max(0, first - 1);
+    return {
+      since: d.minutes[first],
+      data: {
+        ...d,
+        minutes: d.minutes.slice(cut),
+        system: { cpu: d.system.cpu.slice(cut), mem: d.system.mem.slice(cut) },
+        apps: d.apps.map(a => ({ ...a, cpu: a.cpu.slice(cut), mem: a.mem.slice(cut), net: a.net.slice(cut) })),
+      },
+    };
+  }, [tl.data]);
   useEffect(() => { setPicked(null); }, [range]);
 
   const sysSeries = useMemo(() => data ? [
@@ -75,7 +91,9 @@ export function Timeline({ range, setRange, onApp }: { range: number; setRange: 
       {tl.error && <div className="error">{t('Не удалось загрузить историю: {0}', tl.error)}</div>}
 
       <section className="block">
-        <h2>{t('Вся система')} <small>{t('процессор и занятая память, % по минутам')}</small></h2>
+        <h2>{t('Вся система')} <small>{t('процессор и занятая память, % по минутам')}</small>
+          {since != null && <small style={{ marginLeft: 'auto' }}>{t('данные есть с {0} — раньше агент не работал', dayTime(since))}</small>}
+        </h2>
         <div className="panel chart-box">
           {data && data.minutes.length > 1
             ? <Plot ts={data.minutes} series={sysSeries} height={170} yMax={100} yFormat={v => `${v}%`} onPick={setPicked} />

@@ -42,6 +42,15 @@ if (-not $iscc) {
 }
 
 Step 'Собираю установщик'
+# Старый установщик мог остаться запущенным (или его держит антивирус/Проводник) — тогда Inno не сможет его перезаписать.
+$prev = Join-Path $root "installer\Output\SysWatch-Setup-$version.exe"
+if (Test-Path $prev) {
+    Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $prev } | Stop-Process -Force -ErrorAction SilentlyContinue
+    for ($i = 0; $i -lt 10 -and (Test-Path $prev); $i++) {
+        try { Remove-Item $prev -Force -ErrorAction Stop } catch { Start-Sleep -Seconds 1 }
+    }
+    if (Test-Path $prev) { throw "Не могу удалить старый $prev — он занят. Закройте установщик SysWatch (и окно Проводника с этой папкой) и запустите скрипт снова." }
+}
 & $iscc "/DAppVersion=$version" "/DPublishDir=$out" (Join-Path $root 'installer\SysWatch.iss')
 if ($LASTEXITCODE -ne 0) { throw 'Inno Setup не собрал установщик' }
 

@@ -31,9 +31,58 @@ public sealed class Signatures
         }
         catch
         {
-            return path.StartsWith(WinDir, StringComparison.OrdinalIgnoreCase)
-                ? ("system", "Microsoft Windows")
-                : ("unsigned", null);
+            if (path.StartsWith(WinDir, StringComparison.OrdinalIgnoreCase)) return ("system", "Microsoft Windows");
+            return StorePackage(path) is { } signer ? ("signed", signer) : ("unsigned", null);
         }
+    }
+
+    /// <summary>
+    /// Приложения из Microsoft Store (MSIX/AppX) подписаны пакетом целиком: подпись лежит в AppxSignature.p7x
+    /// в корне пакета, а сами exe внутри без подписи. Папку WindowsApps защищает Windows (пишет только система),
+    /// поэтому файл из неё с подписью пакета считаем подписанным издателем пакета.
+    /// </summary>
+    private static string? StorePackage(string path)
+    {
+        const string marker = "\\WindowsApps\\";
+        int i = path.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (i < 0) return null;
+        int start = i + marker.Length, end = path.IndexOf('\\', start);
+        if (end < 0) return null;
+        var root = path[..end];
+        var sig = Path.Combine(root, "AppxSignature.p7x");
+        if (!File.Exists(sig)) return null;
+
+        try
+        {
+            // Формат p7x: 4 байта «PKCX», дальше PKCS#7 SignedData.
+            var bytes = File.ReadAllBytes(sig);
+            if (bytes.Length > 4 && bytes[0] == 'P' && bytes[1] == 'K' && bytes[2] == 'C' && bytes[3] == 'X')
+            {
+                var certs = new X509Certificate2Collection();
+#pragma warning disable SYSLIB0057
+                certs.Import(bytes.AsSpan(4).ToArray());
+#pragma warning restore SYSLIB0057
+                // Сертификат издателя — тот, который сам никого не подписал.
+                var leaf = certs.Cast<X509Certificate2>()
+                    .FirstOrDefault(c => !certs.Cast<X509Certificate2>().Any(o => o != c && o.Issuer == c.Subject));
+                var name = leaf?.GetNameInfo(X509NameType.SimpleName, false);
+                foreach (var c in certs) c.Dispose();
+                if (!string.IsNullOrWhiteSpace(name)) return name;
+            }
+        }
+        catch (Exception) { /* разберём имя из манифеста */ }
+
+        try
+        {
+            var manifest = Path.Combine(root, "AppxManifest.xml");
+            if (File.Exists(manifest))
+            {
+                var doc = System.Xml.Linq.XDocument.Load(manifest);
+                var display = doc.Descendants().FirstOrDefault(e => e.Name.LocalName == "PublisherDisplayName")?.Value;
+                if (!string.IsNullOrWhiteSpace(display)) return display.Trim();
+            }
+        }
+        catch (Exception) { }
+        return L.T("Пакет Microsoft Store");
     }
 }

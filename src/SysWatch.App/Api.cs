@@ -17,7 +17,7 @@ namespace SysWatch.App;
 /// <summary>Маршрутизатор /api/* для интерфейса. Возвращает (код, JSON).</summary>
 public sealed class Api(Queries queries, LiveSampler live, AnomalyStore anomalies, DiskService disk, Connections connections,
     Installed programs, Firewall firewall, GeoIp geo, Startup startup, Hardware hardware, Insights insights, DevEnv dev, BrowserHistory history, GpuQueries gpu,
-    Health health, ReportCenter reports, AppSettings settings, LocalAi ai, Updates updates)
+    Health health, ReportCenter reports, AppSettings settings, Updates updates)
 {
     private static readonly JsonSerializerOptions Json = new()
     {
@@ -131,21 +131,10 @@ public sealed class Api(Queries queries, LiveSampler live, AnomalyStore anomalie
                 case "/api/settings" when method == "POST":
                     try
                     {
-                        var upd = JsonSerializer.Deserialize<SettingsUpdate>(body ?? "{}", Json) ?? new SettingsUpdate(null, null, null, null);
+                        var upd = JsonSerializer.Deserialize<SettingsUpdate>(body ?? "{}", Json) ?? new SettingsUpdate(null, null, null);
                         return (200, Serialize(settings.Save(upd)));
                     }
                     catch (InvalidOperationException ex) { return (400, JsonSerializer.Serialize(ex.Message)); }
-
-                case "/api/ai/models" when method == "GET":
-                    return (200, Serialize(await ai.Models(q["url"])));
-                case "/api/ai/explain" when method == "POST":
-                {
-                    HealthReport report;
-                    await _history.WaitAsync();
-                    try { report = health.Get(); }
-                    finally { _history.Release(); }
-                    return (200, Serialize(await ai.Explain(report))); // модель думает долго — вне блокировки
-                }
 
                 case "/api/updates" when method == "GET":
                 {

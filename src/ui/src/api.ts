@@ -391,12 +391,9 @@ export interface ReportSchedule { template: string; every: 'off' | 'day' | 'week
 export interface ExportResult { ok: boolean; message: string; path: string | null }
 
 export interface AlertSettings { enabled: boolean; cpuPct: number; memPct: number; minutes: number; diskFreePct: number; gpuTemp: number }
-export interface AiSettings { enabled: boolean; url: string; model: string }
 export interface StorageInfo { dir: string; bytes: number; days: number; oldest: number | null; avgDayBytes: number }
-export interface SettingsView { retentionDays: number; detailDays: number; alerts: AlertSettings; ai: AiSettings; storage: StorageInfo }
-export interface SettingsUpdate { retentionDays?: number; detailDays?: number; alerts?: AlertSettings; ai?: AiSettings }
-export interface AiModels { ok: boolean; message: string; models: string[] }
-export interface AiAnswer { ok: boolean; text: string; model: string | null }
+export interface SettingsView { retentionDays: number; detailDays: number; alerts: AlertSettings; storage: StorageInfo }
+export interface SettingsUpdate { retentionDays?: number; detailDays?: number; alerts?: AlertSettings }
 export interface UpdateItem { name: string; id: string; version: string; available: string; source: string }
 export interface UpdateJob { running: boolean; current: string | null; done: string[]; failed: string[]; log: string | null }
 export interface UpdatesView { available: boolean; error: string | null; checkedAt: number; items: UpdateItem[]; job: UpdateJob; checking: boolean }
@@ -410,8 +407,6 @@ export const errorText = (e: unknown) => {
 export const api = {
   settings: () => get<SettingsView>('/api/settings'),
   saveSettings: (u: SettingsUpdate) => postBody<SettingsView>('/api/settings', u),
-  aiModels: (url?: string) => get<AiModels>(`/api/ai/models${url ? `?url=${encodeURIComponent(url)}` : ''}`),
-  aiExplain: () => postJson<AiAnswer>('/api/ai/explain'),
   updates: (refresh = false) => get<UpdatesView>(`/api/updates${refresh ? '?refresh=1' : ''}`),
   installUpdates: (ids: string[]) => postBody<boolean>('/api/updates/install', ids),
   health: (refresh = false) => get<HealthReport>(`/api/health${refresh ? '?refresh=1' : ''}`),

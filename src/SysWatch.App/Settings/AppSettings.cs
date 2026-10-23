@@ -7,14 +7,11 @@ namespace SysWatch.App.Settings;
 /// <summary>Пороги для уведомлений в трее. Minutes — сколько минут подряд нагрузка должна держаться выше порога.</summary>
 public sealed record AlertSettings(bool Enabled, int CpuPct, int MemPct, int Minutes, int DiskFreePct, int GpuTemp);
 
-/// <summary>Локальная языковая модель (Ollama). Выключена, пока пользователь сам не включит; адрес — только этот компьютер.</summary>
-public sealed record AiSettings(bool Enabled, string Url, string Model);
-
 public sealed record StorageInfo(string Dir, long Bytes, int Days, long? Oldest, long AvgDayBytes);
 
-public sealed record SettingsView(int RetentionDays, int DetailDays, AlertSettings Alerts, AiSettings Ai, StorageInfo Storage);
+public sealed record SettingsView(int RetentionDays, int DetailDays, AlertSettings Alerts, StorageInfo Storage);
 
-public sealed record SettingsUpdate(int? RetentionDays, int? DetailDays, AlertSettings? Alerts, AiSettings? Ai);
+public sealed record SettingsUpdate(int? RetentionDays, int? DetailDays, AlertSettings? Alerts);
 
 /// <summary>
 /// Настройки SysWatch в C:\ProgramData\SysWatch\settings.json. Этот же файл читает агент (срок хранения),
@@ -28,7 +25,6 @@ public sealed class AppSettings(DayFiles files)
     public static readonly int[] RetentionChoices = [30, 90, 180, 365];
 
     public static readonly AlertSettings DefaultAlerts = new(true, 90, 90, 5, 10, 85);
-    public static readonly AiSettings DefaultAi = new(false, "http://localhost:11434", "");
 
     private readonly object _gate = new();
 
@@ -68,7 +64,6 @@ public sealed class AppSettings(DayFiles files)
             }
         }
     }
-    public AiSettings Ai { get { lock (_gate) return Read(Load(), "ai", DefaultAi); } }
 
     public SettingsView View()
     {
@@ -77,7 +72,7 @@ public sealed class AppSettings(DayFiles files)
             var o = Load();
             int retention = Math.Clamp(Read(o, "retentionDays", 90), 1, 3650);
             return new SettingsView(retention, Math.Clamp(Read(o, "detailDays", 30), 1, retention),
-                Read(o, "alerts", DefaultAlerts), Read(o, "ai", DefaultAi), Storage());
+                Read(o, "alerts", DefaultAlerts), Storage());
         }
     }
 
@@ -102,13 +97,7 @@ public sealed class AppSettings(DayFiles files)
                     DiskFreePct = Math.Clamp(a.DiskFreePct, 1, 50),
                     GpuTemp = Math.Clamp(a.GpuTemp, 60, 110)
                 }, Json);
-            if (u.Ai is { } ai)
-            {
-                ai = ai with { Url = ai.Url?.Trim() ?? "", Model = ai.Model?.Trim() ?? "" };
-                if (ai.Url.Length > 0 && !LocalAi.IsLocal(ai.Url))
-                    throw new InvalidOperationException(L.T("Адрес модели должен указывать на этот компьютер (localhost)."));
-                o["ai"] = JsonSerializer.SerializeToNode(ai with { Url = ai.Url.Length > 0 ? ai.Url.TrimEnd('/') : DefaultAi.Url }, Json);
-            }
+            o.Remove("ai"); // локальный ИИ убран — старую секцию не храним
             Directory.CreateDirectory(Path.GetDirectoryName(File)!);
             var tmp = File + ".tmp";
             System.IO.File.WriteAllText(tmp, o.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));

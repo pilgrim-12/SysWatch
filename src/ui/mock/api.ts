@@ -45,10 +45,16 @@ function wave(i: number, t: number, base: number, k = 0.6) {
   return Math.max(0, base * (1 - k / 2 + k * noise(i * 31.7 + t / 60)) * burst);
 }
 
+/** Как на сервере: не больше 720 точек на период. */
 function minutes(range: number) {
-  const end = Math.floor(now() / 60) * 60;
-  return Array.from({ length: range }, (_, i) => end - (range - 1 - i) * 60);
+  const step = Math.max(1, Math.ceil(range / 720)) * 60;
+  const n = Math.ceil((range * 60) / step);
+  const end = Math.floor(now() / step) * step;
+  return Array.from({ length: n }, (_, i) => end - (n - 1 - i) * step);
 }
+
+/** Агент в тестовых данных «работает» только последние сутки — проверяем, как окно показывает неполный период. */
+const AGENT_SINCE = () => now() - 20 * 3600;
 
 function live() {
   const t = now();
@@ -86,8 +92,8 @@ function timeline(range: number) {
   return {
     minutes: mins,
     system: {
-      cpu: mins.map((t, k) => Math.min(100, 5 + apps.reduce((s, a) => s + a.cpu[k], 0))),
-      mem: mins.map(t => 72 + 10 * noise(t / 1800)),
+      cpu: mins.map((t, k) => t < AGENT_SINCE() ? null : Math.min(100, 5 + apps.reduce((s, a) => s + a.cpu[k], 0))),
+      mem: mins.map(t => t < AGENT_SINCE() ? null : 72 + 10 * noise(t / 1800)),
     },
     apps,
   };
@@ -672,9 +678,7 @@ export function mockApi(req: IncomingMessage, res: ServerResponse, next: () => v
       case '/api/history/pending': return ['Edge'];
       case '/api/history': return historyMock(Number(u.searchParams.get('days') ?? 7), u.searchParams.get('q') ?? '', u.searchParams.get('source') ?? '', u.searchParams.get('kind') ?? '');
       case '/api/report': return reportMock(Number(u.searchParams.get('days') ?? 7));
-      case '/api/settings': return { retentionDays: 90, detailDays: 30, alerts: { enabled: true, cpuPct: 90, memPct: 90, minutes: 5, diskFreePct: 10, gpuTemp: 85 }, ai: { enabled: true, url: 'http://localhost:11434', model: 'llama3.2:3b' }, storage: { dir: 'C:\\ProgramData\\SysWatch\\hot', bytes: 412e6, days: 7, oldest: now() - 6 * 86400, avgDayBytes: 58e6 } };
-      case '/api/ai/models': return { ok: true, message: 'Ollama работает, моделей: 2', models: ['llama3.2:3b', 'qwen2.5:7b'] };
-      case '/api/ai/explain': return { ok: true, model: 'llama3.2:3b', text: 'В целом компьютер в нормальном состоянии, но есть две вещи, которые стоит сделать.\n\nГлавное — место на диске C: осталось 8%. Удалите ненужные файлы в разделе «Диск», иначе Windows начнёт тормозить.\n\nНа этой неделе компьютер один раз выключился без завершения работы. Если это повторится — проверьте питание.' };
+      case '/api/settings': return { retentionDays: 90, detailDays: 30, alerts: { enabled: true, cpuPct: 90, memPct: 90, minutes: 5, diskFreePct: 10, gpuTemp: 85 }, storage: { dir: 'C:\\ProgramData\\SysWatch\\hot', bytes: 412e6, days: 7, oldest: now() - 6 * 86400, avgDayBytes: 58e6 } };
       case '/api/updates': return { available: true, error: null, checkedAt: now() - 300, checking: false, items: [
         { name: 'Google Chrome', id: 'Google.Chrome', version: '129.0.6668.90', available: '130.0.6723.70', source: 'winget' },
         { name: 'Visual Studio Code', id: 'Microsoft.VisualStudioCode', version: '1.94.0', available: '1.95.1', source: 'winget' },

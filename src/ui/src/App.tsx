@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, type Live } from './api';
-import { ago, bytes, pct } from './format';
+import { ago, bytes, dayTime, pct } from './format';
 import { LANGS, lang, setLang, t, type Lang } from './i18n';
 import { Scopes, emptyHistory, pushLive, type LiveHistory } from './components/Scopes';
 import { BrandMark, IconAlert, IconApps, IconChip, IconDisk, IconHeat, IconLink, IconList, IconNet, IconClock, IconCode, IconGpu, IconPulse, IconReport, IconGauge, IconGear } from './components/Icons';
@@ -124,6 +124,9 @@ export function App() {
           </select>
         </label>
         <div className="rail-foot">
+          <div className="rail-version" title={t('Версия SysWatch и время сборки интерфейса')}>
+            {t('Версия {0} · сборка {1}', __APP_VERSION__, dayTime(__BUILD_TIME__))}
+          </div>
           <div style={{ marginBottom: 6 }}>
             <span className={`agent-dot ${agent?.running ? '' : 'off'}`} />
             <strong>{agent?.running ? t('Агент пишет данные') : t('Агент не запущен')}</strong>

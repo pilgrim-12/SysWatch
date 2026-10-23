@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, errorText, type AiModels, type AiSettings, type AlertSettings, type SettingsView } from '../api';
+import { api, errorText, type AlertSettings, type SettingsView } from '../api';
 import { bytes } from '../format';
 import { locale, t } from '../i18n';
 
@@ -25,7 +25,7 @@ export function Settings() {
       <div className="head">
         <div>
           <h1>{t('Настройки')}</h1>
-          <p>{t('Сколько хранить историю, когда предупреждать и подключение локального ИИ. Настройки хранятся только на этом компьютере.')}</p>
+          <p>{t('Сколько хранить историю и когда предупреждать. Настройки хранятся только на этом компьютере.')}</p>
         </div>
       </div>
 
@@ -35,7 +35,6 @@ export function Settings() {
         <>
           <Retention s={s} onSave={days => save({ retentionDays: days }, t('срок хранения'))} />
           <Alerts value={s.alerts} onSave={a => save({ alerts: a }, t('оповещения'))} />
-          <Ai value={s.ai} onSave={a => save({ ai: a }, t('локальный ИИ'))} />
         </>
       )}
     </>
@@ -110,56 +109,6 @@ function Alerts({ value, onSave }: { value: AlertSettings; onSave: (a: AlertSett
         <div className="report-toolbar" style={{ margin: 0 }}>
           <button className="btn primary" disabled={!changed} onClick={() => onSave(a)}>{t('Сохранить')}</button>
           {changed && <button className="btn" onClick={() => setA(value)}>{t('Отменить')}</button>}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function Ai({ value, onSave }: { value: AiSettings; onSave: (a: AiSettings) => void }) {
-  const [a, setA] = useState(value);
-  const [check, setCheck] = useState<AiModels | null>(null);
-  const [busy, setBusy] = useState(false);
-  useEffect(() => setA(value), [value]);
-  const set = (p: Partial<AiSettings>) => setA(x => ({ ...x, ...p }));
-  const changed = JSON.stringify(a) !== JSON.stringify(value);
-
-  const test = async () => {
-    setBusy(true);
-    try { const m = await api.aiModels(a.url); setCheck(m); if (m.ok && !a.model && m.models[0]) set({ model: m.models[0] }); }
-    catch (e) { setCheck({ ok: false, message: errorText(e), models: [] }); }
-    finally { setBusy(false); }
-  };
-
-  return (
-    <section className="block">
-      <h2>{t('Локальный ИИ')} <small>{t('необязательно')}</small></h2>
-      <div className="panel settings-panel">
-        <div className="settings-row">
-          <div>
-            <b>{t('Объяснять состояние компьютера простыми словами')}</b>
-            <p>{t('Работает через Ollama — языковую модель, установленную на этом же компьютере. SysWatch отправляет ей только сводку из «Обзора»: оценку, цифры нагрузки и найденные проблемы. Историю браузеров, адреса и командные строки — никогда. В интернет ничего не уходит: разрешены только адреса этого компьютера.')}</p>
-          </div>
-          <label className="check"><input type="checkbox" checked={a.enabled} onChange={e => set({ enabled: e.target.checked })} />{t('Включить')}</label>
-        </div>
-        <fieldset className="ai-grid" disabled={!a.enabled}>
-          <label className="num-field">
-            <span>{t('Адрес Ollama')}</span>
-            <input className="search" value={a.url} onChange={e => set({ url: e.target.value })} placeholder="http://localhost:11434" />
-          </label>
-          <label className="num-field">
-            <span>{t('Модель')}</span>
-            <select className="select" value={a.model} onChange={e => set({ model: e.target.value })}>
-              <option value="">{t('первая установленная')}</option>
-              {[...new Set([...(check?.models ?? []), ...(a.model ? [a.model] : [])])].map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
-          </label>
-          <button className="btn" onClick={test} disabled={busy}>{busy ? t('Проверяю…') : t('Проверить подключение')}</button>
-        </fieldset>
-        {check && <div className={`note ${check.ok ? 'ok' : ''}`}>{check.message}</div>}
-        <div className="report-toolbar" style={{ margin: 0 }}>
-          <button className="btn primary" disabled={!changed} onClick={() => onSave(a)}>{t('Сохранить')}</button>
-          {changed && <button className="btn" onClick={() => { setA(value); setCheck(null); }}>{t('Отменить')}</button>}
         </div>
       </div>
     </section>
