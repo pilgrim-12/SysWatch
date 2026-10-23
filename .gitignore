@@ -12,3 +12,4 @@ obj/
 publish/
 node_modules/
 src/ui/dist/
+installer/Output/

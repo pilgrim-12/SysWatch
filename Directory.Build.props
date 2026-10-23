@@ -1,0 +1,11 @@
+<Project>
+  <!-- Версия продукта: одна на агента, окно и установщик. Меняется здесь. -->
+  <PropertyGroup>
+    <Version>1.0.0</Version>
+    <Product>SysWatch</Product>
+    <Company>pilgrim-12</Company>
+    <Copyright>© 2026 pilgrim-12</Copyright>
+    <!-- Только английские ресурсы .NET: не тащим в установщик десятки языковых папок -->
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+</Project>
