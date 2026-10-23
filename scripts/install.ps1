@@ -34,6 +34,18 @@ Step 'Собираю агента'
 dotnet publish (Join-Path $root 'src\SysWatch.Agent\SysWatch.Agent.csproj') -c Release -r win-x64 --self-contained false -o $agentDir --nologo -v q
 if ($LASTEXITCODE -ne 0) { throw 'Сборка агента не удалась' }
 
+Step 'Проверяю интерфейс'
+# В wwwroot должна быть ровно та сборка интерфейса, на которую ссылается index.html:
+# лишние старые файлы удаляем, а без нужных окно открылось бы пустым.
+$www = Join-Path $root 'src\SysWatch.App\wwwroot'
+$refs = [regex]::Matches((Get-Content (Join-Path $www 'index.html') -Raw), 'assets/(index-[^"]+)') | ForEach-Object { $_.Groups[1].Value }
+foreach ($r in $refs) {
+    if (-not (Test-Path (Join-Path $www "assets\$r"))) { throw "Нет файла интерфейса $r — скачайте проект заново или пришлите эту ошибку" }
+}
+Get-ChildItem (Join-Path $www 'assets\index-*') | Where-Object { $refs -notcontains $_.Name } | Remove-Item -Force
+$oldAssets = Join-Path $appDir 'wwwroot\assets'
+if (Test-Path $oldAssets) { Remove-Item $oldAssets -Recurse -Force }
+
 Step 'Собираю окно'
 dotnet publish (Join-Path $root 'src\SysWatch.App\SysWatch.App.csproj') -c Release -r win-x64 --self-contained false -o $appDir --nologo -v q
 if ($LASTEXITCODE -ne 0) { throw 'Сборка окна не удалась' }
