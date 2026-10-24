@@ -28,6 +28,7 @@ public sealed class Api(Queries queries, LiveSampler live, AnomalyStore anomalie
 
     // История читается по одному запросу за раз: SQLite-файлы общие, а кэши простые.
     private readonly SemaphoreSlim _history = new(1, 1);
+    private readonly FileSearch _search = new();
 
     public async Task<(int Status, string Body)> Handle(Uri uri, string method = "GET", string? body = null)
     {
@@ -205,6 +206,38 @@ public sealed class Api(Queries queries, LiveSampler live, AnomalyStore anomalie
                     return (200, Serialize(disk.StartScan(q["root"])));
                 case "/api/disk/cleanup-scan" when method == "POST":
                     return (200, Serialize(disk.StartCleanupScan()));
+                case "/api/disk/list" when method == "GET":
+                    return (200, Serialize(await Task.Run(() => disk.Listing(q["path"] ?? ""))));
+                case "/api/disk/locate" when method == "GET":
+                    return (200, Serialize(new { path = disk.Locate(q["path"] ?? "") }));
+                case "/api/disk/reveal" when method == "POST":
+                    return (200, Serialize(FolderList.Reveal(q["path"] ?? "")
+                        ? new ActionResult(true, L.T("Открыто."))
+                        : new ActionResult(false, L.T("Файл не найден: возможно, его уже удалили или переместили."))));
+                case "/api/search" when method == "GET":
+                    return (200, Serialize(_search.State()));
+                case "/api/search" when method == "POST":
+                {
+                    var sq = JsonSerializer.Deserialize<SearchQuery>(body ?? "{}", Json);
+                    return (200, Serialize(new { started = sq is not null && _search.Start(sq) }));
+                }
+                case "/api/search/cancel" when method == "POST":
+                    _search.Cancel();
+                    return (200, "true");
+                case "/api/recycle" when method == "GET":
+                    return (200, Serialize(await Task.Run(RecycleBin.List)));
+                case "/api/recycle/restore" when method == "POST":
+                {
+                    var ids = JsonSerializer.Deserialize<string[]>(body ?? "[]", Json) ?? [];
+                    return (200, Serialize(await Task.Run(() => RecycleBin.Restore(ids))));
+                }
+                case "/api/recycle/delete" when method == "POST":
+                {
+                    var ids = JsonSerializer.Deserialize<string[]>(body ?? "[]", Json) ?? [];
+                    return (200, Serialize(await Task.Run(() => RecycleBin.Delete(ids))));
+                }
+                case "/api/recycle/empty" when method == "POST":
+                    return (200, Serialize(await Task.Run(RecycleBin.Empty)));
                 case "/api/disk/cancel" when method == "POST":
                     disk.Cancel();
                     return (200, "true");

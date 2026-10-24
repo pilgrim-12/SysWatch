@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
-import { api, type CleanupCategory, type DiskState, type DiskTree, type Growth, type OpProgress } from '../api';
+import { api, type FolderEntry, type CleanupCategory, type DiskState, type DiskTree, type Growth, type OpProgress } from '../api';
 import { COLOR, ago, bytes, dayTime } from '../format';
 import { Treemap } from '../components/Treemap';
 import { locale, t } from '../i18n';
@@ -7,6 +7,23 @@ import { PathName } from '../components/PathName';
 // three.js тяжёлый — грузим его, только когда открыт вид «3D».
 const Disk3D = lazy(() => import('../components/Disk3D'));
 import { describePath } from '../pathLabel';
+import { FileSearch } from '../components/FileSearch';
+import { FolderFiles } from '../components/FolderFiles';
+import { RecycleBin } from '../components/RecycleBin';
+
+/** Общая папка нескольких путей на одном диске. */
+function commonFolder(paths: string[]) {
+  const split = paths.map(p => p.split('\\').slice(0, -1));
+  const first = split[0] ?? [];
+  let n = first.length;
+  for (const s of split) {
+    let i = 0;
+    while (i < n && i < s.length && s[i].toLowerCase() === first[i].toLowerCase()) i++;
+    n = i;
+  }
+  const parts = first.slice(0, Math.max(1, n));
+  return parts.length === 1 ? parts[0] + '\\' : parts.join('\\');
+}
 
 const GROUPS: { key: CleanupCategory['group']; title: string; note: string }[] = [
   { key: 'system', title: t('Система'), note: t('Безопасно удалять: всё это Windows и программы создадут заново при необходимости.') },
@@ -79,6 +96,9 @@ export function Disk() {
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [confirm, setConfirm] = useState(false);
+  const [marks, setMarks] = useState<string[]>([]);
+  const mapRef = useRef<HTMLElement>(null);
+  const [files3d, setFiles3d] = useState<FolderEntry[]>([]);
   const prevStatus = useRef<string | null>(null);
   const prevCleanup = useRef<number | null>(null);
 
@@ -117,6 +137,14 @@ export function Disk() {
     if (snapId == null) { setGrowth(null); return; }
     api.diskGrowth(currentRoot).then(setGrowth).catch(() => {});
   }, [snapId, currentRoot]);
+
+  // Для 3D: мелкие файлы открытой папки встают отдельными зданиями.
+  useEffect(() => {
+    if (view !== '3d' || !tree) { setFiles3d([]); return; }
+    let alive = true;
+    api.diskList(tree.path).then(l => alive && setFiles3d(l.entries)).catch(() => alive && setFiles3d([]));
+    return () => { alive = false; };
+  }, [view, tree]);
 
   // Новый результат поиска мусора — отметки по умолчанию.
   useEffect(() => {
@@ -157,6 +185,22 @@ export function Disk() {
     setConfirm(false);
     await api.diskClean([...checked], [...excluded]);
   });
+
+  /** «На карте»: открыть ближайшую к файлам папку из снимка и подсветить, где они лежат. */
+  const locate = async (paths: string[]) => {
+    if (!paths.length) return;
+    const driveRoot = paths[0].slice(0, 3).toUpperCase();
+    const same = paths.filter(p => p.slice(0, 3).toUpperCase() === driveRoot);
+    const folder = commonFolder(same);
+    try {
+      const loc = await api.diskLocate(folder.endsWith('\\') ? folder + '_' : folder + '\\_');
+      if (driveRoot !== currentRoot.toUpperCase()) { setRoot(driveRoot); setGrowth(null); }
+      setPath(loc.path);
+      setMarks(same);
+      if (view === 'list') setView('map');
+      requestAnimationFrame(() => mapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    } catch (e) { setError(String((e as Error).message ?? e)); }
+  };
 
   const drive = state?.drives.find(d => d.root === state.root) ?? null;
   const used = drive ? drive.total - drive.free : 0;
@@ -245,13 +289,18 @@ export function Disk() {
         </section>
       )}
 
+      <section className="block">
+        <h2>{t('Поиск файлов')} <small>{t('по всему диску, без индексации: каждый раз свежий обход')}</small></h2>
+        <FileSearch drives={state?.drives.map(d => d.root) ?? []} onLocate={locate} />
+      </section>
+
       {!snap ? (
-        <div className="panel empty">
+        <div className="panel empty" ref={mapRef as React.RefObject<HTMLDivElement>}>
           {t('Снимка этого диска ещё нет. Нажми «Сканировать»: обход занимает от минуты до нескольких минут и идёт с низким приоритетом, работе не мешает.')}
         </div>
       ) : (
         <>
-          <section className="block">
+          <section className="block" ref={mapRef}>
             <h2>
               {t('Что занимает место')} <small>{t('снимок {0}, {1} файлов', ago(snap.ts), snap.files.toLocaleString(locale()))}</small>
               <span className="seg" role="group" aria-label={t('Вид')} style={{ marginLeft: 'auto' }}>
@@ -270,12 +319,21 @@ export function Disk() {
                 ))}
                 {tree?.delta ? <span className="delta" style={{ marginLeft: 'auto' }}>{signed(tree.delta)}</span> : null}
               </nav>
+              {marks.length > 0 && (
+                <div className="marks-bar">
+                  <span className="pin inline">{marks.length}</span>
+                  {marks.length === 1
+                    ? <span className="marks-file" title={marks[0]}>{t('Где лежит: {0}', marks[0].slice(marks[0].lastIndexOf('\\') + 1))}</span>
+                    : <span>{t('Отмечено найденных файлов: {0}. Подсвечены папки, где они лежат.', marks.length)}</span>}
+                  <button className="link" onClick={() => setMarks([])}>{t('Убрать отметки')}</button>
+                </div>
+              )}
               {!tree ? <div className="empty">{t('Загружаю…')}</div> : view === '3d' ? (
                 <Suspense fallback={<div className="empty">{t('Загружаю 3D…')}</div>}>
-                  <Disk3D items={tree.items} other={tree.other} total={tree.size} onOpen={setPath} />
+                  <Disk3D items={tree.items} other={tree.other} total={tree.size} onOpen={setPath} marks={marks} base={tree.path} files={files3d} />
                 </Suspense>
               ) : view === 'map' ? (
-                <Treemap items={tree.items} other={tree.other} total={tree.size} onOpen={setPath} />
+                <Treemap items={tree.items} other={tree.other} total={tree.size} onOpen={setPath} marks={marks} base={tree.path} />
               ) : (
                 <div className="tree">
                   {tree.items.map(it => (
@@ -297,6 +355,7 @@ export function Disk() {
                   )}
                 </div>
               )}
+              {tree && <FolderFiles path={tree.path} onOpen={setPath} marks={marks} />}
             </div>
           </section>
 
@@ -318,6 +377,11 @@ export function Disk() {
           </section>
         </>
       )}
+
+      <section className="block">
+        <h2>{t('Корзина')} <small>{t('на всех дисках')}</small></h2>
+        <RecycleBin onChanged={() => api.disk(root).then(setState).catch(() => {})} />
+      </section>
 
       {state && !drive?.isSystem ? null : (
       <section className="block">

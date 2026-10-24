@@ -182,6 +182,18 @@ export interface DiskState {
 
 export interface TreeChild { name: string; isDir: boolean; size: number }
 export interface TreeItem { path: string; name: string; isDir: boolean; size: number; files: number; delta: number | null; children: TreeChild[]; other: number }
+export interface SearchQuery { text: string; root: string; kind: string; minSize: number; days: number; folders: boolean }
+export interface SearchHit { path: string; name: string; isDir: boolean; size: number; modified: number }
+export interface SearchState {
+  running: boolean; query: SearchQuery | null; dirs: number; files: number; current: string | null;
+  started: number; seconds: number; truncated: boolean; error: string | null; hits: SearchHit[];
+}
+export interface FolderEntry { path: string; name: string; isDir: boolean; size: number; modified: number; hidden: boolean }
+export interface FolderListing { path: string; exists: boolean; total: number; filesSize: number; truncated: boolean; entries: FolderEntry[] }
+export interface RecycleItem { id: string; name: string; original: string; isDir: boolean; size: number; deleted: number; drive: string }
+export interface RecycleView { total: number; count: number; truncated: boolean; items: RecycleItem[] }
+export interface RecycleResult { ok: boolean; message: string; done: number; failed: number }
+
 export interface DiskTree { path: string; size: number; delta: number | null; items: TreeItem[]; other: number }
 export interface Growth { since: number | null; items: { path: string; size: number; delta: number; isNew: boolean }[]; driveDelta: number }
 
@@ -482,6 +494,16 @@ export const api = {
   diskScan: (root: string) => post(`/api/disk/scan?root=${encodeURIComponent(root)}`),
   diskCleanupScan: () => post('/api/disk/cleanup-scan'),
   diskCancel: () => post('/api/disk/cancel'),
+  diskList: (path: string) => get<FolderListing>(`/api/disk/list?path=${encodeURIComponent(path)}`),
+  diskLocate: (path: string) => get<{ path: string }>(`/api/disk/locate?path=${encodeURIComponent(path)}`),
+  revealPath: (path: string) => postJson<{ ok: boolean; message: string }>(`/api/disk/reveal?path=${encodeURIComponent(path)}`),
+  search: () => get<SearchState>('/api/search'),
+  searchStart: (q: SearchQuery) => postBody<{ started: boolean }>('/api/search', q),
+  searchCancel: () => post('/api/search/cancel'),
+  recycle: () => get<RecycleView>('/api/recycle'),
+  recycleRestore: (ids: string[]) => postBody<RecycleResult>('/api/recycle/restore', ids),
+  recycleDelete: (ids: string[]) => postBody<RecycleResult>('/api/recycle/delete', ids),
+  recycleEmpty: () => postJson<RecycleResult>('/api/recycle/empty'),
   diskClean: (categories: string[], exclude: string[]) => post('/api/disk/clean', { categories, exclude }),
   anomalyIgnore: (rule: string, app: string) =>
     post(`/api/anomalies/ignore?rule=${encodeURIComponent(rule)}&app=${encodeURIComponent(app)}`),

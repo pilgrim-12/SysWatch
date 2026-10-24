@@ -1013,3 +1013,77 @@ pre.log { margin: 6px 0 0; white-space: pre-wrap; font-size: 12px; color: var(--
 .si-table { margin-top: 10px; }
 .si-table h4 { margin: 4px 0 6px; font-size: 13px; color: var(--muted); font-weight: 500; }
 .si-table th, .si-table td { text-align: left; }
+
+/* ── Поиск файлов, содержимое папки, Корзина ── */
+.fsearch { padding: 14px 16px; }
+.fsearch-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.fsearch-text { flex: 1 1 280px; width: auto; }
+.fsearch-form .select { padding: 6px 8px; }
+.fsearch-check { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 13px; white-space: nowrap; cursor: pointer; }
+.fsearch-status { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; color: var(--muted); font-size: 13px; }
+.fsearch-current { color: var(--faint); max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+.warn-text { color: var(--warn); }
+.spin { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--grid); border-top-color: var(--net); animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.fsearch-list, .rbin-list, .ffiles-list { margin-top: 10px; max-height: 460px; overflow: auto; border-top: 1px solid var(--grid); }
+.fsearch-row, .rbin-row, .ffiles-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) 90px 130px 170px; gap: 12px; align-items: center;
+  padding: 6px 4px; border-bottom: 1px solid var(--grid);
+}
+.fsearch-row.head .link:first-child { justify-self: start; }
+.fsearch-row.head .link:nth-child(2) { justify-self: end; }
+.fsearch-row.head { position: sticky; top: 0; background: var(--panel); z-index: 1; font-size: 12px; }
+.fsearch-row.head .link[aria-pressed="true"] { color: var(--paper); font-weight: 600; }
+.fsearch-row:not(.head):hover, .ffiles-row:hover, .rbin-row:hover { background: var(--panel-2); }
+.fsearch-name { display: flex; flex-direction: column; min-width: 0; }
+.fsearch-name b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fsearch-name .path-sub, .rbin-row .path-sub { color: var(--faint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fsearch-size, .ffiles-size { color: var(--disk); text-align: right; font-variant-numeric: tabular-nums; }
+.fsearch-act { display: flex; gap: 14px; justify-content: flex-end; white-space: nowrap; }
+.fsearch-more { display: block; margin: 10px auto; }
+
+.ffiles { border-top: 1px solid var(--grid); padding: 12px 14px 4px; }
+.ffiles-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.ffiles-head h3 { margin: 0; font-size: 15px; }
+.ffiles-path { color: var(--faint); font-size: 12px; flex: 1 1 200px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ffiles-sum { margin-top: 8px; font-size: 13px; }
+.ffiles-row { grid-template-columns: minmax(0, 1fr) 100px 130px 80px; }
+.ffiles-row.hid { opacity: 0.6; }
+.ffiles-name { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.ffiles-name > span:first-child, .ffiles-name > .link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.ffiles-row.marked { background: rgb(79 195 217 / 0.10); }
+
+.rbin { padding: 14px 16px; }
+.rbin-top { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+.rbin-sum { display: flex; gap: 10px; align-items: baseline; }
+.rbin-sum b { font-size: 22px; color: var(--disk); }
+.rbin-tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }
+.rbin-row { grid-template-columns: 22px minmax(0, 1fr) 90px 150px; cursor: pointer; }
+.rbin-row.on { background: rgb(242 124 107 / 0.08); }
+
+/* Отметки найденного на карте */
+.pin {
+  position: absolute; bottom: 6px; right: 6px; z-index: 2; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700;
+  background: var(--net); color: #06202a; box-shadow: 0 0 0 3px rgb(79 195 217 / 0.35), 0 0 14px rgb(79 195 217 / 0.8);
+  pointer-events: none;
+}
+.pin.inline { position: static; height: 18px; min-width: 18px; font-size: 11px; box-shadow: 0 0 8px rgb(79 195 217 / 0.7); }
+.tile.marked { outline: 2px solid var(--net); outline-offset: -2px; z-index: 1; animation: markPulse 1.4s ease-in-out infinite; }
+.subtile.marked { outline: 2px solid var(--net); outline-offset: -1px; background: rgb(79 195 217 / 0.35) !important; }
+@keyframes markPulse { 50% { box-shadow: inset 0 0 0 4px rgb(79 195 217 / 0.45); } }
+@media (prefers-reduced-motion: reduce) { .tile.marked, .spin { animation: none; } }
+.marks-bar { display: flex; gap: 10px; align-items: center; padding: 8px 14px; background: rgb(79 195 217 / 0.08); border-bottom: 1px solid var(--grid); font-size: 13px; }
+.marks-file { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.marks-bar .link { margin-left: auto; }
+.d3-pin {
+  min-width: 24px; height: 24px; padding: 0 7px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+  background: var(--net); color: #06202a; font-weight: 700; font-size: 12px; box-shadow: 0 0 16px rgb(92 225 240 / 0.9);
+}
+.block { scroll-margin-top: 140px; }
+.d3-legend { position: absolute; left: 12px; top: 10px; z-index: 2; display: flex; flex-wrap: wrap; gap: 4px 12px; max-width: 70%;
+  padding: 6px 10px; border-radius: 6px; background: rgb(13 23 38 / .7); font-size: 12px; color: var(--muted); pointer-events: none; }
+.d3-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.d3-legend i { display: inline-block; width: 10px; height: 10px; }
+.d3-legend i.sq { background: #7d64c9; border-radius: 2px; }
+.d3-legend i.hex { clip-path: polygon(25% 5%, 75% 5%, 100% 50%, 75% 95%, 25% 95%, 0 50%); }

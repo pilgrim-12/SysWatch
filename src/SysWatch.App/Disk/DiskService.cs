@@ -257,6 +257,35 @@ public sealed class DiskService
         return new Tree(path, size, selfDelta, items, Math.Max(0, size - items.Sum(i => i.Size)));
     }
 
+    /// <summary>Содержимое папки прямо сейчас; размер подпапок берём из последнего снимка.</summary>
+    public FolderListing Listing(string path)
+    {
+        var root = Normalize(path);
+        var latest = _store.Latest(root);
+        var sizes = latest is null
+            ? new Dictionary<string, DiskNode>(StringComparer.OrdinalIgnoreCase)
+            : _store.Children(latest.Id, path.Length > 3 ? path.TrimEnd('\\') : path).ToDictionary(n => n.Path, StringComparer.OrdinalIgnoreCase);
+        return FolderList.Get(path, p => sizes.TryGetValue(p, out var n) ? (long?)n.Size : null);
+    }
+
+    /// <summary>
+    /// Ближайшая к файлу папка, которая есть в снимке (в снимок попадают папки от 100 МБ):
+    /// её и открываем на карте, чтобы показать, где лежит файл.
+    /// </summary>
+    public string Locate(string file)
+    {
+        var root = Normalize(file);
+        var latest = _store.Latest(root);
+        if (latest is null) return root;
+        var p = Path.GetDirectoryName(file.TrimEnd('\\'));
+        while (!string.IsNullOrEmpty(p) && p.Length > root.Length)
+        {
+            if (_store.Node(latest.Id, p) is { IsDir: true }) return p;
+            p = Path.GetDirectoryName(p);
+        }
+        return root;
+    }
+
     /// <summary>
     /// Что выросло с прошлого снимка. Показываем самые конкретные папки:
     /// если почти весь рост родителя объясняется одной вложенной папкой, показываем её, а не родителя.

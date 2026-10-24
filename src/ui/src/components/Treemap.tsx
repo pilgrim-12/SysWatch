@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { bytes } from '../format';
 import { locale, t } from '../i18n';
+import { countRest, countUnder } from '../marks';
 
 export interface MapChild { name: string; isDir: boolean; size: number }
 export interface MapItem { path: string; name: string; isDir: boolean; size: number; delta: number | null; children: MapChild[]; other: number }
@@ -56,11 +57,14 @@ const OTHER = '#2a3a52';
 
 interface Tip { x: number; y: number; title: string; lines: string[] }
 
-export function Treemap({ items, other, total, onOpen }: {
+export function Treemap({ items, other, total, onOpen, marks = [], base = '' }: {
   items: MapItem[];
   other: number;
   total: number;
   onOpen: (path: string) => void;
+  /** Найденные файлы: плитки, где они лежат, подсвечены. */
+  marks?: readonly string[];
+  base?: string;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 800, h: 460 });
@@ -98,10 +102,12 @@ export function Treemap({ items, other, total, onOpen }: {
         const style = { left: rect.x, top: rect.y, width: rect.w, height: rect.h, '--tile': color } as React.CSSProperties;
 
         if (!item) {
+          const rest = marks.length ? countRest(marks, base, items.map(i => i.path)) : 0;
           return (
-            <div key="other" className="tile other" style={style}
+            <div key="other" className={`tile other${rest ? ' marked' : ''}`} style={style}
               onMouseMove={e => show(e, t('Мелкие файлы и папки'), [bytes(other), pct(other), t('Каждый объект меньше 100 МБ')])}>
               {big && <span className="tile-label"><b>{t('Мелкое')}</b> {bytes(other)}</span>}
+              {rest > 0 && <span className="pin" title={t('Найдено файлов: {0}', rest)}>{rest}</span>}
             </div>
           );
         }
@@ -112,9 +118,10 @@ export function Treemap({ items, other, total, onOpen }: {
         const subs = item.isDir && inner.w > 30 && inner.h > 24 ? [...item.children.map(c => c.size), item.other] : [];
         const subRects = subs.length ? squarify(subs, inner) : [];
         const growing = item.delta != null && item.delta >= 300 * 1024 * 1024;
+        const found = marks.length ? countUnder(marks, item.path) : 0;
 
         return (
-          <div key={item.path} className={`tile ${item.isDir ? 'dir' : 'file'}`} style={style}
+          <div key={item.path} className={`tile ${item.isDir ? 'dir' : 'file'}${found ? ' marked' : ''}`} style={style}
             onClick={() => item.isDir && onOpen(item.path)}
             onMouseMove={e => show(e, item.name, [
               bytes(item.size), pct(item.size),
@@ -131,8 +138,9 @@ export function Treemap({ items, other, total, onOpen }: {
               if (r.w < 2 || r.h < 2) return null;
               const child = j < item.children.length ? item.children[j] : null;
               const label = r.w > 64 && r.h > 18;
+              const sub = found && child ? countUnder(marks, `${item.path}\\${child.name}`) : 0;
               return (
-                <div key={j} className={`subtile ${child ? (child.isDir ? 'dir' : 'file') : 'rest'}`}
+                <div key={j} className={`subtile ${child ? (child.isDir ? 'dir' : 'file') : 'rest'}${sub ? ' marked' : ''}`}
                   style={{ left: r.x, top: r.y, width: r.w, height: r.h }}
                   onClick={e => { if (child?.isDir) { e.stopPropagation(); onOpen(`${item.path}\\${child.name}`); } }}
                   onMouseMove={e => {
@@ -146,6 +154,7 @@ export function Treemap({ items, other, total, onOpen }: {
                 </div>
               );
             })}
+            {found > 0 && <span className="pin" title={t('Найдено файлов: {0}', found)}>{found}</span>}
           </div>
         );
       })}

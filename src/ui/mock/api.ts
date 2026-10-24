@@ -564,6 +564,54 @@ function diskTree(path: string | null) {
   return { path: p, size: total, delta: p === ROOT ? 13.5 * GB : null, items, other: total - items.reduce((s, i) => s + i.size, 0) };
 }
 
+// ── Поиск, содержимое папки, корзина ──
+const HITS = [
+  ['C:\\Users\\ANTRARES\\Videos\\Captures\\demo-2026-10-12.mp4', 3.9 * GB],
+  ['C:\\Users\\ANTRARES\\Videos\\trip\\GOPR0412.mp4', 2.4 * GB],
+  ['C:\\Users\\ANTRARES\\Downloads\\ubuntu-24.04-desktop.iso', 5.7 * GB],
+  ['C:\\Users\\ANTRARES\\Downloads\\lecture-ml-net.mp4', 812 * MB],
+  ['C:\\Users\\ANTRARES\\Documents\\Zoom\\2026-09-30 standup\\video1.mp4', 418 * MB],
+  ['C:\\GIT\\SysWatch\\docs\\screen-record.mp4', 96 * MB],
+  ['C:\\Users\\ANTRARES\\AppData\\Local\\Temp\\tmp81A2.mp4', 12 * MB],
+] as const;
+let searchAt = 0;
+function searchState() {
+  const el = (now() - searchAt);
+  const running = searchAt > 0 && el < 3;
+  const n = searchAt === 0 ? 0 : running ? Math.min(HITS.length, Math.floor(el * 3)) : HITS.length;
+  return {
+    running, query: searchAt ? { text: '*.mp4', root: 'all', kind: '', minSize: 0, days: 0, folders: false } : null,
+    dirs: running ? Math.floor(el * 20000) : 61_207, files: running ? Math.floor(el * 250000) : 812_344,
+    current: running ? 'C:\\Users\\ANTRARES\\AppData\\Local\\Packages' : null, started: searchAt, seconds: running ? el : 3.4,
+    truncated: false, error: null,
+    hits: HITS.slice(0, n).map(([p, size], i) => ({ path: p, name: p.slice(p.lastIndexOf('\\') + 1), isDir: false, size, modified: now() - i * 86400 * 3 })),
+  };
+}
+function folderList(path: string) {
+  const p = path || ROOT;
+  const rows = TREE[p] ?? [];
+  const base = p.endsWith('\\') ? p : p + '\\';
+  const dirs = rows.filter(r => r[2]).map(([n, size]) => ({ path: base + n, name: n, isDir: true, size, modified: now() - 86400 * 2, hidden: n.startsWith('.') }));
+  const files = [
+    ...rows.filter(r => !r[2]).map(([n, size]) => ({ path: base + n, name: n, isDir: false, size, modified: now() - 3600, hidden: n.endsWith('.sys') })),
+    ...['report-2026-10.pdf', 'notes.txt', 'setup.log', 'photo_0412.jpg', 'budget.xlsx', 'desktop.ini'].map((n, i) => ({ path: base + n, name: n, isDir: false, size: [4.2 * MB, 3 * KB, 180 * KB, 6.1 * MB, 92 * KB, 282][i], modified: now() - i * 86400 * 5, hidden: n === 'desktop.ini' })),
+    ...Array.from({ length: 60 }, (_, i) => { const ext = ['mp4', 'jpg', 'pdf', 'zip', 'docx', 'png'][i % 6]; const n = `file_${String(i).padStart(3, '0')}.${ext}`; return { path: base + n, name: n, isDir: false, size: Math.round(90 * MB / (1 + i * 0.6)), modified: now() - i * 7200, hidden: false }; }),
+  ].sort((a, b) => b.size - a.size);
+  return { path: p, exists: true, total: dirs.length + files.length, filesSize: files.reduce((s, f) => s + f.size, 0), truncated: false, entries: [...dirs, ...files] };
+}
+let recycleItems = [
+  ['C:\\Users\\ANTRARES\\Downloads\\Win11_24H2_Russian_x64.iso', 5.8 * GB, false, 1],
+  ['C:\\GIT\\old-prototype', 1.3 * GB, true, 2],
+  ['C:\\Users\\ANTRARES\\Videos\\Captures\\obs-2026-09-02.mkv', 2.1 * GB, false, 5],
+  ['C:\\Users\\ANTRARES\\Desktop\\черновик договора.docx', 48 * KB, false, 9],
+  ['D:\\Photos\\2019\\дубли', 740 * MB, true, 12],
+  ['C:\\Users\\ANTRARES\\Documents\\счёт-сентябрь.pdf', 220 * KB, false, 20],
+] as [string, number, boolean, number][];
+function recycle() {
+  const items = recycleItems.map(([p, size, isDir, d], i) => ({ id: `${p.slice(0, 3)}$Recycle.Bin\\S-1-5-21\\$R${i}`, name: p.slice(p.lastIndexOf('\\') + 1), original: p, isDir, size, deleted: now() - d * 86400, drive: p.slice(0, 3) }));
+  return { total: items.reduce((s, x) => s + x.size, 0), count: items.length, truncated: false, items };
+}
+
 function diskGrowth() {
   return {
     since: now() - 7 * 86400,
@@ -792,6 +840,14 @@ export function mockApi(req: IncomingMessage, res: ServerResponse, next: () => v
       case '/api/programs': return programs();
       case '/api/disk/tree': return diskTree(u.searchParams.get('path'));
       case '/api/disk/growth': return diskGrowth();
+      case '/api/disk/list': return folderList(u.searchParams.get('path') ?? '');
+      case '/api/disk/locate': { const f = u.searchParams.get('path') ?? ''; const d = f.slice(0, f.lastIndexOf('\\')); return { path: TREE[d] ? d : (TREE[d.slice(0, d.lastIndexOf('\\'))] ? d.slice(0, d.lastIndexOf('\\')) : 'C:\\Users\\ANTRARES') }; }
+      case '/api/disk/reveal': return { ok: true, message: 'Открыто.' };
+      case '/api/search': if (req.method === 'POST') { searchAt = now(); return { started: true }; } return searchState();
+      case '/api/search/cancel': return true;
+      case '/api/recycle': return recycle();
+      case '/api/recycle/empty': { const n = recycleItems.length; recycleItems = []; return { ok: true, message: 'Корзина очищена, освобождено 10,2 ГБ.', done: n, failed: 0 }; }
+      case '/api/recycle/delete': case '/api/recycle/restore': { const n = recycleItems.length; recycleItems = recycleItems.slice(1); return { ok: true, message: u.pathname.endsWith('restore') ? 'Восстановлено: 1.' : 'Удалено навсегда: 1.', done: n - recycleItems.length, failed: 0 }; }
       case '/api/anomalies/ignore': return true;
       default: return null;
     }
