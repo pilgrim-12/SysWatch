@@ -4,11 +4,13 @@ import { useLoad } from '../hooks';
 import { COLOR, bytes, dayTime } from '../format';
 import { Plot } from '../components/Plot';
 import { CrashView } from '../components/Crashes';
+import { SystemInfoTab } from '../components/SystemInfoTab';
 import { locale, t } from '../i18n';
 
-type Tab = 'startup' | 'disks' | 'battery' | 'wakes' | 'cpu' | 'crashes';
+type Tab = 'info' | 'startup' | 'disks' | 'battery' | 'wakes' | 'cpu' | 'crashes';
 
 const TABS: { key: Tab; label: string }[] = [
+  { key: 'info', label: t('О компьютере') },
   { key: 'startup', label: t('Автозагрузка') },
   { key: 'disks', label: t('Здоровье дисков') },
   { key: 'battery', label: t('Батарея') },
@@ -18,18 +20,19 @@ const TABS: { key: Tab; label: string }[] = [
 ];
 
 export function System({ onApp }: { onApp: (name: string) => void }) {
-  const [tab, setTab] = useState<Tab>('startup');
+  const [tab, setTab] = useState<Tab>('info');
   return (
     <>
       <div className="head">
         <div>
           <h1>{t('Система')}</h1>
-          <p>{t('Что запускается вместе с Windows, в каком состоянии диски и батарея, кто будит компьютер и не сбрасывает ли процессор частоту.')}</p>
+          <p>{t('Всё о компьютере: модель и компоненты, Windows и учётная запись, безопасность, автозагрузка, диски, батарея и сбои.')}</p>
         </div>
       </div>
       <div className="seg" role="tablist" style={{ marginBottom: 18 }}>
         {TABS.map(x => <button key={x.key} role="tab" aria-pressed={tab === x.key} onClick={() => setTab(x.key)}>{x.label}</button>)}
       </div>
+      {tab === 'info' && <SystemInfoTab />}
       {tab === 'startup' && <StartupTab onApp={onApp} />}
       {tab === 'disks' && <DisksTab />}
       {tab === 'battery' && <BatteryTab />}

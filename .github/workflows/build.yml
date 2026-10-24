@@ -11,6 +11,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write      # для аттестации сборки (подпись GitHub «собрано из этого коммита»)
+  attestations: write
 
 jobs:
   build:
@@ -44,14 +46,56 @@ jobs:
         shell: pwsh
         run: ./scripts/build-installer.ps1
 
+      # Аттестация: GitHub подписывает запись «этот файл собран workflow'ом из такого-то коммита pilgrim-12/SysWatch».
+      # Проверка у получателя: gh attestation verify SysWatch-Setup-x.y.z.exe --repo pilgrim-12/SysWatch
+      - name: Attest build provenance
+        if: github.event_name != 'pull_request'
+        continue-on-error: true   # в закрытых репозиториях аттестации доступны только на тарифе Enterprise — сборку это не останавливает
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: installer/Output/*.exe
+
       - uses: actions/upload-artifact@v4
         with:
           name: SysWatch-Setup
-          path: installer/Output/*.exe
+          path: |
+            installer/Output/*.exe
+            installer/Output/*.sha256
+
+      - name: Release notes
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem installer/Output/*.exe | Select-Object -First 1
+          $hash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          @"
+          ## Установка
+          1. Скачайте **$($exe.Name)** и запустите.
+          2. Установщик пока не подписан сертификатом, поэтому Windows SmartScreen покажет «Windows защитила ваш компьютер» → нажмите **«Подробнее» → «Выполнить в любом случае»**.
+          3. Нужны Windows 10 (1809+) или 11, x64. .NET ставить не нужно.
+
+          ## Проверка, что файл не подменили
+          SHA-256: ``$hash``
+
+          ``````powershell
+          (Get-FileHash .\$($exe.Name) -Algorithm SHA256).Hash
+          ``````
+          Должно совпасть с числом выше (регистр букв не важен).
+
+          Ещё надёжнее — аттестация GitHub (файл собран из этого репозитория, а не на чьём-то компьютере):
+          ``````
+          gh attestation verify .\$($exe.Name) --repo ${{ github.repository }}
+          ``````
+
+          SysWatch работает офлайн и ничего не отправляет в интернет. Удаление — через «Параметры → Приложения».
+          "@ | Set-Content release-notes.md -Encoding utf8
 
       - name: Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: installer/Output/*.exe
+          files: |
+            installer/Output/*.exe
+            installer/Output/*.sha256
+          body_path: release-notes.md
           generate_release_notes: true

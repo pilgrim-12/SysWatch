@@ -1,8 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { api, type CleanupCategory, type DiskState, type DiskTree, type Growth, type OpProgress } from '../api';
 import { COLOR, ago, bytes, dayTime } from '../format';
 import { Treemap } from '../components/Treemap';
 import { locale, t } from '../i18n';
+import { PathName } from '../components/PathName';
+// three.js тяжёлый — грузим его, только когда открыт вид «3D».
+const Disk3D = lazy(() => import('../components/Disk3D'));
+import { describePath } from '../pathLabel';
 
 const GROUPS: { key: CleanupCategory['group']; title: string; note: string }[] = [
   { key: 'system', title: t('Система'), note: t('Безопасно удалять: всё это Windows и программы создадут заново при необходимости.') },
@@ -64,7 +68,8 @@ function OpPanel({ op, root, onStop }: { op: OpProgress; root: string; onStop: (
 
 export function Disk() {
   const [root, setRoot] = useState<string | null>(null);
-  const [view, setView] = useState<'map' | 'list'>('map');
+  const [view, setView] = useState<'map' | 'list' | '3d'>(() => { try { const v = localStorage.getItem('disk_view'); return v === 'list' || v === '3d' ? v : 'map'; } catch { return 'map'; } });
+  useEffect(() => { try { localStorage.setItem('disk_view', view); } catch { /* не страшно */ } }, [view]);
   const [state, setState] = useState<DiskState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [path, setPath] = useState<string | null>(null);
@@ -252,6 +257,7 @@ export function Disk() {
               <span className="seg" role="group" aria-label={t('Вид')} style={{ marginLeft: 'auto' }}>
                 <button aria-pressed={view === 'map'} onClick={() => setView('map')}>{t('Карта')}</button>
                 <button aria-pressed={view === 'list'} onClick={() => setView('list')}>{t('Список')}</button>
+                <button aria-pressed={view === '3d'} onClick={() => setView('3d')}>3D</button>
               </span>
             </h2>
             <div className="panel">
@@ -264,14 +270,18 @@ export function Disk() {
                 ))}
                 {tree?.delta ? <span className="delta" style={{ marginLeft: 'auto' }}>{signed(tree.delta)}</span> : null}
               </nav>
-              {!tree ? <div className="empty">{t('Загружаю…')}</div> : view === 'map' ? (
+              {!tree ? <div className="empty">{t('Загружаю…')}</div> : view === '3d' ? (
+                <Suspense fallback={<div className="empty">{t('Загружаю 3D…')}</div>}>
+                  <Disk3D items={tree.items} other={tree.other} total={tree.size} onOpen={setPath} />
+                </Suspense>
+              ) : view === 'map' ? (
                 <Treemap items={tree.items} other={tree.other} total={tree.size} onOpen={setPath} />
               ) : (
                 <div className="tree">
                   {tree.items.map(it => (
                     <div key={it.path} className={`tree-row ${it.isDir ? 'dir' : 'file'}`}
                       onClick={() => it.isDir && setPath(it.path)} title={it.path}>
-                      <span className="tree-name">{it.isDir ? '▸ ' : ''}{it.name}</span>
+                      <span className="tree-name">{it.isDir ? '▸ ' : ''}{it.name}{describePath(it.path) && <em className="tree-label" title={describePath(it.path)!.hint}> · {describePath(it.path)!.label}</em>}</span>
                       <span className="tree-bar"><i style={{ width: `${tree.size ? (it.size / tree.size) * 100 : 0}%` }} /></span>
                       <span className="tree-size">{bytes(it.size)}</span>
                       <span className={`delta ${it.delta && it.delta > 0 ? 'up' : ''}`}>{signed(it.delta)}</span>
@@ -299,7 +309,7 @@ export function Disk() {
                 <div className="empty">{t('Ни одна папка не выросла больше чем на 300 МБ.')}</div>
               ) : growth.items.map(g => (
                 <div key={g.path} className="grow-row" onClick={() => { setPath(g.path.slice(0, g.path.lastIndexOf('\\')) || null); setView('list'); }} title={t('Показать в дереве')}>
-                  <span className="grow-path">{g.path}{g.isNew && <span className="tag new">{t('новая')}</span>}</span>
+                  <PathName path={g.path} isNew={g.isNew} />
                   <span className="delta up">{signed(g.delta)}</span>
                   <span className="dim">{bytes(g.size)}</span>
                 </div>

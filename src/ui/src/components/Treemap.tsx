@@ -8,7 +8,7 @@ export interface MapItem { path: string; name: string; isDir: boolean; size: num
 interface Rect { x: number; y: number; w: number; h: number }
 
 /** Squarified treemap (Bruls, Huizing, van Wijk): прямоугольники ближе к квадрату — их легче сравнивать глазом. */
-function squarify(values: number[], box: Rect): Rect[] {
+export function squarify(values: number[], box: Rect): Rect[] {
   const out: Rect[] = new Array(values.length);
   const total = values.reduce((s, v) => s + v, 0);
   if (total <= 0 || box.w <= 0 || box.h <= 0) return values.map(() => ({ x: box.x, y: box.y, w: 0, h: 0 }));
@@ -50,7 +50,7 @@ function squarify(values: number[], box: Rect): Rect[] {
 }
 
 // Приглушённые тона на тёмном фоне: различимы между собой и не спорят с цветами ресурсов в шапке.
-const HUES = ['#c98b2e', '#7d64c9', '#c45f50', '#2f9bb0', '#4c9a6a', '#4f74c4', '#b05c8f', '#8a8f3a'];
+export const HUES = ['#c98b2e', '#7d64c9', '#c45f50', '#2f9bb0', '#4c9a6a', '#4f74c4', '#b05c8f', '#8a8f3a'];
 const FILE = '#4a5a70';
 const OTHER = '#2a3a52';
 

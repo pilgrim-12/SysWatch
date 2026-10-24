@@ -408,7 +408,17 @@ export interface GeoCountry { code: string; tx: number; rx: number; connects: nu
 export interface GeoFlow { app: string; dest: string; ip: string; country: string | null; tx: number; rx: number; connects: number }
 export interface GeoView { from: number; home: string | null; homeManual: boolean; geoAvailable: boolean; geoStatus: string | null; countries: GeoCountry[]; flows: GeoFlow[]; unknownBytes: number; lanBytes: number }
 
+export interface SysKv { label: string; value: string; tone: 'ok' | 'warn' | 'bad' | null }
+export interface SysTable { title: string | null; columns: string[]; rows: string[][] }
+export interface SysSection { id: string; title: string; items: SysKv[]; tables: SysTable[]; note: string | null }
+export interface SysOverview { ts: number; sections: SysSection[] }
+export interface RestorePoint { sequence: number; description: string; ts: number; type: string }
+export interface RestoreInfo { available: boolean; points: RestorePoint[]; note: string | null }
+
 export const api = {
+  systemInfo: (refresh = false) => get<SysOverview>(`/api/system/info${refresh ? '?refresh=1' : ''}`),
+  restorePoints: () => get<RestoreInfo>('/api/system/restore'),
+  createRestorePoint: () => postJson<{ ok: boolean; message: string }>('/api/system/restore/create'),
   geo: (range: number) => get<GeoView>(`/api/geo?range=${range}`),
   geoHome: () => get<{ home: string | null }>('/api/geo/home'),
   settings: () => get<SettingsView>('/api/settings'),

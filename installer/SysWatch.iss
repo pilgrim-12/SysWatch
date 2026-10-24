@@ -85,8 +85,9 @@ Name: "{autodesktop}\SysWatch"; Filename: "{app}\SysWatch.exe"; WorkingDir: "{ap
 
 [Run]
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\setup\setup.ps1"" -AppDir ""{app}"""; StatusMsg: "{cm:Configuring}"; Flags: runhidden waituntilterminated
-; Запуск через задачу планировщика: окно стартует с обычным для SysWatch уровнем прав, без лишнего окна UAC
-Filename: "schtasks.exe"; Parameters: "/Run /TN SysWatch"; Description: "{cm:Launch}"; Flags: postinstall runhidden nowait
+; Запуск через задачу планировщика (тот же способ, что при входе в Windows; задача стартует SysWatch в трее),
+; затем повторный запуск SysWatch.exe — он просит уже работающую копию открыть окно. Иначе после «Готово» был бы только значок в трее.
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""schtasks /Run /TN SysWatch | Out-Null; Start-Sleep -Seconds 2; Start-Process -FilePath '{app}\SysWatch.exe'"""; Description: "{cm:Launch}"; Flags: postinstall runhidden nowait
 
 [UninstallRun]
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\setup\remove.ps1"""; Flags: runhidden waituntilterminated; RunOnceId: "RemoveSysWatch"

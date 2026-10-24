@@ -5,6 +5,7 @@ import { COLOR, appLabel, bytes, dayTime, pct, pluralWord } from '../format';
 import { Plot } from '../components/Plot';
 import { WhyCard } from '../components/WhyCard';
 import { t } from '../i18n';
+import { PathName } from '../components/PathName';
 
 const PERIODS = [
   { days: 1, label: t('Сутки') },
@@ -137,7 +138,7 @@ function WeekReport({ onApp }: { onApp: (name: string) => void }) {
                       <p style={{ marginTop: 0 }}>{r.diskGrowth.driveDelta >= 0 ? t('С {0} занято больше на', dayTime(r.diskGrowth.since)) : t('С {0} занято меньше на', dayTime(r.diskGrowth.since))} <b>{bytes(Math.abs(r.diskGrowth.driveDelta))}</b>.</p>
                       {r.diskGrowth.items.filter(i => i.delta > 0).slice(0, 6).map(i => (
                         <div key={i.path} className="grow-row" style={{ cursor: 'default' }}>
-                          <span className="grow-path" title={i.path}>{i.path}</span>
+                          <PathName path={i.path} />
                           <span style={{ color: COLOR.disk }}>+{bytes(i.delta)}</span>
                         </div>
                       ))}

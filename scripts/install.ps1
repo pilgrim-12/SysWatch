@@ -38,11 +38,15 @@ Step 'Проверяю интерфейс'
 # В wwwroot должна быть ровно та сборка интерфейса, на которую ссылается index.html:
 # лишние старые файлы удаляем, а без нужных окно открылось бы пустым.
 $www = Join-Path $root 'src\SysWatch.App\wwwroot'
-$refs = [regex]::Matches((Get-Content (Join-Path $www 'index.html') -Raw), 'assets/(index-[^"]+)') | ForEach-Object { $_.Groups[1].Value }
+$refs = @([regex]::Matches((Get-Content (Join-Path $www 'index.html') -Raw), 'assets/(index-[^"]+)') | ForEach-Object { $_.Groups[1].Value })
+# Части, которые главный скрипт подгружает по требованию (например, 3D-вид диска: import("./Disk3D-….js")).
+foreach ($js in @($refs | Where-Object { $_ -like '*.js' })) {
+    $refs += [regex]::Matches((Get-Content (Join-Path $www "assets\$js") -Raw), 'import\("\./([A-Za-z0-9_-]+\.js)"\)') | ForEach-Object { $_.Groups[1].Value }
+}
 foreach ($r in $refs) {
     if (-not (Test-Path (Join-Path $www "assets\$r"))) { throw "Нет файла интерфейса $r — скачайте проект заново или пришлите эту ошибку" }
 }
-Get-ChildItem (Join-Path $www 'assets\index-*') | Where-Object { $refs -notcontains $_.Name } | Remove-Item -Force
+Get-ChildItem (Join-Path $www 'assets') -File | Where-Object { $_.Extension -in '.js', '.css' -and $refs -notcontains $_.Name } | Remove-Item -Force
 $oldAssets = Join-Path $appDir 'wwwroot\assets'
 if (Test-Path $oldAssets) { Remove-Item $oldAssets -Recurse -Force }
 

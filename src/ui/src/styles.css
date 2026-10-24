@@ -964,3 +964,52 @@ pre.log { margin: 6px 0 0; white-space: pre-wrap; font-size: 12px; color: var(--
 .wm-tip-in { margin-top: 6px; color: var(--cpu); font-size: 12px; }
 .conn-map-legend { display: flex; gap: 18px; font-size: 13px; color: var(--muted); margin: 8px 2px 0; flex-wrap: wrap; }
 .conn-map-legend i { display: inline-block; width: 18px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+
+/* ── Понятные имена папок ─────────────────────────────── */
+.path-name { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+.path-label { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.path-label b { font-weight: 600; }
+.path-sub { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.path-hint { color: var(--faint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.path-kind { font-size: 11px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--grid); color: var(--muted); }
+.path-kind.k-update { color: var(--net); border-color: rgb(79 195 217 / .4); }
+.path-kind.k-temp, .path-kind.k-cache { color: var(--ok); border-color: rgb(107 207 142 / .4); }
+.path-kind.k-system { color: var(--cpu); border-color: rgb(242 181 68 / .4); }
+.path-kind.k-dev { color: var(--mem); border-color: rgb(167 139 250 / .4); }
+.tree-label { font-style: normal; color: var(--net); font-size: 13px; }
+
+/* ── Диск в 3D ─────────────────────────────────────────── */
+.d3-host { position: relative; height: 560px; margin: 10px; border-radius: var(--r-sm); overflow: hidden; background: #0d1726; }
+.d3-host canvas { display: block; cursor: grab; }
+.d3-host canvas:active { cursor: grabbing; }
+.d3-labels { position: absolute; inset: 0; pointer-events: none; }
+.d3-label {
+  display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 3px 8px; border-radius: 6px;
+  background: rgb(13 23 38 / .72); border: 1px solid rgb(143 163 188 / .25); color: var(--paper); font-size: 12px; white-space: nowrap;
+  backdrop-filter: blur(2px);
+}
+.d3-label b { font-weight: 600; }
+.d3-label span { color: var(--muted); font-size: 11px; }
+.d3-label.grew { border-color: rgb(242 124 107 / .7); }
+.d3-label.grew span { color: var(--warn); }
+.d3-host .tmap-tip { z-index: 3; }
+.d3-help { position: absolute; left: 12px; bottom: 10px; font-size: 12px; color: var(--faint); pointer-events: none; z-index: 2; }
+.d3-labels { z-index: 1; }
+.d3-host .tmap-tip { z-index: 5; }
+
+/* ── О компьютере ─────────────────────────────────────── */
+.si-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
+.si-card { padding: 14px 16px; min-width: 0; }
+.si-card.wide { grid-column: 1 / -1; }
+@media (max-width: 1100px) { .si-grid { grid-template-columns: 1fr; } }
+.si-card h3 { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; font-size: 16px; font-weight: 600; }
+.si-kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px 24px; margin: 0; }
+.si-kv div { min-width: 0; }
+.si-kv dt { color: var(--muted); font-size: 12px; }
+.si-kv dd { margin: 1px 0 0; font-size: 14px; overflow-wrap: anywhere; }
+.si-kv dd.tone-ok { color: var(--ok); }
+.si-kv dd.tone-warn { color: var(--cpu); }
+.si-kv dd.tone-bad { color: var(--warn); }
+.si-table { margin-top: 10px; }
+.si-table h4 { margin: 4px 0 6px; font-size: 13px; color: var(--muted); font-weight: 500; }
+.si-table th, .si-table td { text-align: left; }

@@ -17,7 +17,7 @@ namespace SysWatch.App;
 /// <summary>Маршрутизатор /api/* для интерфейса. Возвращает (код, JSON).</summary>
 public sealed class Api(Queries queries, LiveSampler live, AnomalyStore anomalies, DiskService disk, Connections connections,
     Installed programs, Firewall firewall, GeoIp geo, Startup startup, Hardware hardware, Insights insights, DevEnv dev, BrowserHistory history, GpuQueries gpu,
-    Health health, ReportCenter reports, AppSettings settings, Updates updates, GeoTraffic geoTraffic)
+    Health health, ReportCenter reports, AppSettings settings, Updates updates, GeoTraffic geoTraffic, SystemInfo sysInfo)
 {
     private static readonly JsonSerializerOptions Json = new()
     {
@@ -160,6 +160,15 @@ public sealed class Api(Queries queries, LiveSampler live, AnomalyStore anomalie
                 case "/api/report/open" when method == "POST":
                     return (200, Serialize(OpenFile(q["path"] ?? "")));
 
+                case "/api/system/info" when method == "GET":
+                    return (200, Serialize(await Task.Run(() => sysInfo.Get(q["refresh"] == "1"))));
+                case "/api/system/restore" when method == "GET":
+                    return (200, Serialize(await Task.Run(SystemInfo.RestorePoints)));
+                case "/api/system/restore/create" when method == "POST":
+                {
+                    var (ok, message) = await Task.Run(SystemInfo.CreateRestorePoint);
+                    return (200, Serialize(new { ok, message }));
+                }
                 case "/api/geo/home" when method == "GET":
                     return (200, Serialize(new { home = geoTraffic.Home() }));
                 case "/api/geo/download" when method == "POST":

@@ -254,6 +254,8 @@ function reportMock(days: number) {
     newPrograms: ['ollama.exe', 'Sideloadly.exe', 'node.exe', 'rufus-4.6.exe', 'OBS64.exe'],
     systemDrive: { root: 'C:\\', total: 476 * GB, free: 61 * GB },
     diskGrowth: { since: t - 7 * 86400, driveDelta: 18.6 * GB, items: [
+      { path: 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\156.0.4314.42', size: 0.88 * GB, delta: 0.88 * GB, isNew: true },
+      { path: 'C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\156.0.4314.42', size: 0.87 * GB, delta: 0.87 * GB, isNew: true },
       { path: 'C:\\Users\\ANTRARES\\.ollama\\models', size: 9.1 * GB, delta: 9.1 * GB, isNew: true },
       { path: 'C:\\Users\\ANTRARES\\AppData\\Local\\Docker', size: 41 * GB, delta: 5.2 * GB, isNew: false },
       { path: 'C:\\Windows\\SoftwareDistribution', size: 6.3 * GB, delta: 2.4 * GB, isNew: false },
@@ -737,6 +739,47 @@ export function mockApi(req: IncomingMessage, res: ServerResponse, next: () => v
         { name: 'Samsung SSD 980 PRO 500GB', media: 'SSD', bus: 'NVMe', size: 500 * GB, health: 'healthy', wear: 7, temperature: 41, temperatureMax: 68, powerOnHours: 6120, readErrors: 0, writeErrors: 0, startStops: 2100 },
         { name: 'WDC WD10SPZX-80Z10T2', media: 'HDD', bus: 'SATA', size: 1000 * GB, health: 'warning', wear: null, temperature: 36, temperatureMax: 52, powerOnHours: 18233, readErrors: 14, writeErrors: 0, startStops: 9811 },
       ];
+      case '/api/system/info': return { ts: now() - 20, sections: [
+        { id: 'computer', title: 'Компьютер', note: null, tables: [], items: [
+          { label: 'Производитель', value: 'LENOVO', tone: null }, { label: 'Модель', value: 'Legion 5 15IMH05 (81Y6)', tone: null },
+          { label: 'Тип', value: 'ноутбук', tone: null }, { label: 'Серийный номер', value: 'PF2A1B3C', tone: null },
+          { label: 'Материнская плата', value: 'LENOVO LNVNB161216', tone: null }, { label: 'BIOS', value: 'LENOVO EFCN54WW', tone: null },
+          { label: 'Дата BIOS', value: '12 марта 2023', tone: null }, { label: 'Режим загрузки', value: 'UEFI', tone: null },
+          { label: 'Имя компьютера', value: 'ANTRARES-PC', tone: null }, { label: 'Рабочая группа', value: 'WORKGROUP', tone: null } ] },
+        { id: 'windows', title: 'Windows', note: null, tables: [], items: [
+          { label: 'Система', value: 'Windows 11 Pro', tone: null }, { label: 'Версия', value: '24H2', tone: null }, { label: 'Сборка', value: '26100.6899', tone: null },
+          { label: 'Разрядность', value: '64-разрядная', tone: null }, { label: 'Установлена', value: '14 января 2025', tone: null },
+          { label: 'Последняя загрузка', value: '24 октября 2026, 00:12', tone: null }, { label: 'Работает без перезагрузки', value: '11 ч 13 мин', tone: null },
+          { label: 'Язык системы', value: 'English (United States)', tone: null }, { label: 'Часовой пояс', value: '(UTC+04:00) Tbilisi', tone: null },
+          { label: 'Схема питания', value: 'Сбалансированная', tone: null } ] },
+        { id: 'security', title: 'Безопасность', note: null, tables: [], items: [
+          { label: 'Secure Boot', value: 'включён', tone: 'ok' }, { label: 'TPM', value: 'есть, версия 2.0', tone: 'ok' },
+          { label: 'BitLocker C:', value: 'не зашифрован', tone: null }, { label: 'Защитник Windows', value: 'работает', tone: 'ok' },
+          { label: 'Базы Защитника', value: '24 октября 2026, 08:41', tone: null }, { label: 'Контроль учётных записей (UAC)', value: 'включён', tone: 'ok' } ] },
+        { id: 'cpu', title: 'Процессор', note: null, tables: [], items: [
+          { label: 'Модель', value: 'Intel(R) Core(TM) i7-10750H CPU @ 2.60GHz', tone: null }, { label: 'Ядер / потоков', value: '6 / 12', tone: null },
+          { label: 'Базовая частота', value: '2.59 GHz', tone: null }, { label: 'Кэш L2 / L3', value: '1,5 МБ / 12 МБ', tone: null },
+          { label: 'Виртуализация', value: 'используется (Hyper-V / WSL / Docker)', tone: null } ] },
+        { id: 'account', title: 'Учётная запись', note: null, items: [
+          { label: 'Пользователь', value: 'ANTRARES-PC\\Yurii', tone: null }, { label: 'Вход', value: 'учётная запись Microsoft: yurii@outlook.com', tone: null },
+          { label: 'Администратор', value: 'да', tone: null }, { label: 'Папка пользователя', value: 'C:\\Users\\ANTRARES', tone: null } ],
+          tables: [{ title: 'Пользователи этого компьютера', columns: ['Имя', 'Полное имя', 'Состояние', ''], rows: [['Yurii', 'Yurii', 'активна', ''], ['Administrator', '', 'отключена', ''], ['Guest', '', 'отключена', 'без пароля']] }] },
+        { id: 'memory', title: 'Оперативная память', note: null, items: [
+          { label: 'Всего', value: '15,8 ГБ', tone: null }, { label: 'Слотов занято', value: '2 / 2', tone: null }, { label: 'Максимум по плате', value: '32 ГБ', tone: null } ],
+          tables: [{ title: null, columns: ['Слот', 'Объём', 'Тип', 'Скорость', 'Производитель', 'Модель'], rows: [['DIMM 0', '8 ГБ', 'DDR4', '2933 MT/s', 'Samsung', 'M471A1K43DB1-CWE'], ['DIMM 1', '8 ГБ', 'DDR4', '2933 MT/s', 'Samsung', 'M471A1K43DB1-CWE']] }] },
+        { id: 'gpu', title: 'Видеокарты', note: null, items: [], tables: [{ title: null, columns: ['Модель', 'Видеопамять', 'Драйвер', 'Дата драйвера', 'Режим'], rows: [
+          ['NVIDIA GeForce GTX 1650 with Max-Q Design', '4 ГБ', '32.0.15.6094', '14 августа 2024', ''], ['Intel(R) UHD Graphics', '1 ГБ', '31.0.101.2125', '9 мая 2023', '1920×1080, 144 Hz']] }] },
+        { id: 'displays', title: 'Экраны', note: null, items: [], tables: [
+          { title: null, columns: ['Модель', 'Производитель', 'Диагональ', 'Подключение', 'Год'], rows: [['', 'BOE', '15.6"', 'встроенный экран', '2020'], ['DELL U2719D', 'DEL', '27"', 'HDMI', '2021']] },
+          { title: 'Режимы', columns: ['Экран', 'Разрешение', 'Частота', ''], rows: [['DISPLAY1', '1920×1080', '144 Hz', 'основной'], ['DISPLAY2', '2560×1440', '60 Hz', '']] }] },
+        { id: 'ports', title: 'Порты и USB', note: 'Список разъёмов есть не у всех ноутбуков: многие производители не заполняют его в BIOS.', items: [
+          { label: 'Контроллеры USB', value: 'Intel(R) USB 3.1 eXtensible Host Controller – 1.10 (Microsoft)', tone: null }, { label: 'Thunderbolt / USB4', value: 'не найден', tone: null } ],
+          tables: [{ title: 'Подключено сейчас по USB', columns: ['Устройство', 'Класс'], rows: [['Focusrite USB Audio', 'MEDIA'], ['Logitech USB Receiver', 'HIDClass'], ['Integrated Camera', 'Camera'], ['Intel(R) Wireless Bluetooth(R)', 'Bluetooth']] }] },
+      ] };
+      case '/api/system/restore': return { available: true, note: null, points: [
+        { sequence: 41, description: 'Windows Modules Installer', ts: now() - 3 * 86400, type: 'установка программы' },
+        { sequence: 40, description: 'Scheduled Checkpoint', ts: now() - 10 * 86400, type: 'изменение настроек' } ] };
+      case '/api/system/restore/create': return { ok: false, message: 'Windows не создала новую точку: по умолчанию она делает не больше одной точки в сутки, а последняя была недавно.' };
       case '/api/system/battery': return { present: true, charge: 76, onAc: false, designCapacity: 76000, fullCapacity: 61200, cycles: 312, dischargeRate: 14200, chargeRate: null, wearPct: 19, minutesLeft: 196 };
       case '/api/system/wakes': return { events: [
         { ts: now() - 3600 * 7, sleepTs: now() - 3600 * 9, source: 'Таймер: Windows Update Orchestrator', sourceType: 'таймер пробуждения' },

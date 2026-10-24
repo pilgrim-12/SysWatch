@@ -15,9 +15,13 @@ if (-not $version) { throw 'Нет <Version> в Directory.Build.props' }
 
 Step "Проверяю интерфейс (wwwroot)"
 $www = Join-Path $root 'src\SysWatch.App\wwwroot'
-$refs = [regex]::Matches((Get-Content (Join-Path $www 'index.html') -Raw), 'assets/(index-[^"]+)') | ForEach-Object { $_.Groups[1].Value }
+$refs = @([regex]::Matches((Get-Content (Join-Path $www 'index.html') -Raw), 'assets/(index-[^"]+)') | ForEach-Object { $_.Groups[1].Value })
+# Части, которые главный скрипт подгружает по требованию (например, 3D-вид диска: import("./Disk3D-….js")).
+foreach ($js in @($refs | Where-Object { $_ -like '*.js' })) {
+    $refs += [regex]::Matches((Get-Content (Join-Path $www "assets\$js") -Raw), 'import\("\./([A-Za-z0-9_-]+\.js)"\)') | ForEach-Object { $_.Groups[1].Value }
+}
 foreach ($r in $refs) { if (-not (Test-Path (Join-Path $www "assets\$r"))) { throw "Нет файла интерфейса $r" } }
-Get-ChildItem (Join-Path $www 'assets\index-*') | Where-Object { $refs -notcontains $_.Name } | Remove-Item -Force
+Get-ChildItem (Join-Path $www 'assets') -File | Where-Object { $_.Extension -in '.js', '.css' -and $refs -notcontains $_.Name } | Remove-Item -Force
 
 Step "Публикую SysWatch $version"
 if (Test-Path $out) { Remove-Item $out -Recurse -Force }
@@ -57,3 +61,11 @@ if ($LASTEXITCODE -ne 0) { throw 'Inno Setup не собрал установщ�
 $setup = Join-Path $root "installer\Output\SysWatch-Setup-$version.exe"
 Write-Host "`nГотово: $setup" -ForegroundColor Green
 Write-Host ("Размер: {0:N1} МБ" -f ((Get-Item $setup).Length / 1MB))
+
+# Контрольная сумма: кому вы отправите установщик, сможет проверить, что файл дошёл без подмены:
+#   Get-FileHash .\SysWatch-Setup-x.y.z.exe -Algorithm SHA256
+$hash = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant()
+$sumFile = "$setup.sha256"
+Set-Content -Path $sumFile -Value "$hash  $(Split-Path $setup -Leaf)" -Encoding ascii -NoNewline
+Write-Host "SHA-256: $hash"
+Write-Host "Записано в $sumFile"

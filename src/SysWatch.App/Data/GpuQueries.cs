@@ -66,6 +66,27 @@ public sealed class GpuQueries(DayFiles files)
 
         if (rows.Count == 0) return new GpuView(false, ts, [], [], []);
 
+        // Windows выдаёт видеокарте новый номер (LUID) после каждой перезагрузки — без объединения одна и та же
+        // карта показывалась бы несколько раз. Склеиваем историю по названию карты.
+        var nameByLuid = rows.Where(r => r.Name is not null).GroupBy(r => r.Adapter).ToDictionary(g => g.Key, g => g.Last().Name!);
+        string Canon(string luid) => nameByLuid.TryGetValue(luid, out var nm) ? nm : luid;
+
+        // Виртуальные адаптеры (базовый драйвер Microsoft, удалённый рабочий стол, косвенные дисплеи) — не железо.
+        static bool Virtual(string? name) => name is not null && (
+            name.Contains("Basic Render", StringComparison.OrdinalIgnoreCase) || name.Contains("Basic Display", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains("Remote Display", StringComparison.OrdinalIgnoreCase) || name.Contains("Indirect Display", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains("Virtual", StringComparison.OrdinalIgnoreCase) || name.Contains("Parsec", StringComparison.OrdinalIgnoreCase));
+        var hidden = new HashSet<string>(rows
+            .GroupBy(r => Canon(r.Adapter))
+            .Where(g => Virtual(nameByLuid.GetValueOrDefault(g.First().Adapter))
+                        || (!nameByLuid.ContainsKey(g.First().Adapter) && g.Max(r => r.UtilMax) < 5 && g.Max(r => r.Mem) < 64L << 20))
+            .Select(g => g.Key));
+        rows = rows.Where(r => !hidden.Contains(Canon(r.Adapter))).Select(r => r with { Adapter = Canon(r.Adapter) }).ToList();
+        if (rows.Count == 0) return new GpuView(false, ts, [], [], []);
+        apps = apps.GroupBy(kv => (kv.Key.Name, Adapter: Canon(kv.Key.Adapter)))
+            .Where(g => !hidden.Contains(g.Key.Adapter))
+            .ToDictionary(g => g.Key, g => (g.Sum(x => x.Value.Sum), g.Max(x => x.Value.Peak), g.Max(x => x.Value.Mem), g.Sum(x => x.Value.N)));
+
         var adapters = new List<GpuAdapterView>();
         var series = new List<GpuSeries>();
         int minutesTotal = Math.Max(1, rows.Select(r => r.Ts).Distinct().Count());
