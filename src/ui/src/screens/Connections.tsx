@@ -67,6 +67,18 @@ export function Connections({ onApp }: { onApp: (name: string) => void }) {
       .slice(0, 400);
   }, [snap, dir, q, hideLocal, onlyExposed]);
 
+  // Цифры сверху учитывают галочку «скрыть localhost», иначе они расходятся с таблицей и картой.
+  const counts = useMemo(() => {
+    const all = snap?.rows ?? [];
+    const vis = all.filter(r => !hideLocal || !isLocal(r));
+    return {
+      out: vis.filter(r => r.dir === 'out').length,
+      in: vis.filter(r => r.dir === 'in').length,
+      listen: vis.filter(r => r.dir === 'listen').length,
+      localIn: all.filter(r => r.dir === 'in' && isLocal(r)).length,
+    };
+  }, [snap, hideLocal]);
+
   const downloadGeo = async () => {
     setGeoBusy(true);
     try { await api.geoDownload(); } finally { setGeoBusy(false); }
@@ -99,9 +111,9 @@ export function Connections({ onApp }: { onApp: (name: string) => void }) {
 
       {snap && (
         <div className="facts">
-          <div className="fact"><b style={{ color: 'var(--net)' }}>{snap.out}</b><span>{t('исходящих соединений')}</span></div>
-          <div className="fact"><b style={{ color: snap.in > 0 ? 'var(--cpu)' : undefined }}>{snap.in}</b><span>{t('входящих соединений')}</span></div>
-          <div className="fact"><b>{snap.listen}</b><span>{t('портов ждут подключений')}</span></div>
+          <div className="fact"><b style={{ color: 'var(--net)' }}>{counts.out}</b><span>{t('исходящих соединений')}</span></div>
+          <div className="fact"><b style={{ color: counts.in > 0 ? 'var(--cpu)' : undefined }}>{counts.in}</b><span>{hideLocal && counts.localIn > 0 ? t('входящих извне (ещё {0} внутри компьютера скрыто)', counts.localIn) : t('входящих соединений')}</span></div>
+          <div className="fact"><b>{counts.listen}</b><span>{t('портов ждут подключений')}</span></div>
           <div className="fact">
             <b style={{ color: snap.exposed > 0 ? 'var(--warn)' : undefined }}>{snap.exposed}</b>
             <span>{t('TCP-портов открыто в сеть, не только для этого компьютера')}</span>
@@ -127,7 +139,7 @@ export function Connections({ onApp }: { onApp: (name: string) => void }) {
         </div>
       </div>
 
-      {view === 'map' ? <ConnMap rows={rows} onApp={onApp} /> : (
+      {view === 'map' ? <ConnMap rows={rows} onApp={onApp} hiddenLocal={hideLocal ? (dir === 'in' ? counts.localIn : 0) : 0} /> : (
 
       <div className="panel scroll" style={{ maxHeight: 'calc(100vh - 420px)', minHeight: 320 }}>
         {!rows.length ? <div className="empty">{snap ? t('Нет соединений под этот фильтр.') : t('Загружаю…')}</div> : (

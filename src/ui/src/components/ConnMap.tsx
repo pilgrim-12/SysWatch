@@ -7,7 +7,7 @@ import { WorldMap } from './WorldMap';
 let homeCache: string | null | undefined;
 
 /** Живые соединения на карте: голубые — от вас (исходящие), жёлтые — к вам (входящие). */
-export function ConnMap({ rows, onApp }: { rows: ConnRow[]; onApp: (n: string) => void }) {
+export function ConnMap({ rows, onApp, hiddenLocal = 0 }: { rows: ConnRow[]; onApp: (n: string) => void; hiddenLocal?: number }) {
   const [home, setHome] = useState<string | null>(homeCache ?? null);
   const [selected, setSelected] = useState<string | null>(null);
   useEffect(() => {
@@ -46,7 +46,11 @@ export function ConnMap({ rows, onApp }: { rows: ConnRow[]; onApp: (n: string) =
       <div className="geo-grid">
         <div className="panel geo-map">
           {countries.length === 0
-            ? <div className="empty">{t('Нет внешних соединений под этот фильтр.')}</div>
+            ? <div className="empty">
+                {t('Нет внешних соединений под этот фильтр.')}
+                {hiddenLocal > 0 && <><br />{t('Входящие сейчас только внутри компьютера ({0}): одна ваша программа подключается к другой. Они скрыты галочкой «localhost».', hiddenLocal)}</>}
+                {noCountry > 0 && <><br />{t('Из локальной сети (роутер, телефон, ТВ): {0} — у них нет страны.', noCountry)}</>}
+              </div>
             : <WorldMap mode="live" countries={countries} home={home} selected={selected} onSelect={setSelected} />}
         </div>
         <div className="panel geo-side">
