@@ -22,3 +22,4 @@ export const BrandMark = () => (
     <path d="M4 14h4l2-6 3 9 2-5h5" stroke="#f2b544" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
+export const IconShield = () => <svg {...base}><path d="M12 3 4.5 6v5.5c0 4.6 3.1 8.2 7.5 9.5 4.4-1.3 7.5-4.9 7.5-9.5V6L12 3Z" /><path d="m8.8 12.2 2.2 2.2 4.3-4.6" /></svg>;

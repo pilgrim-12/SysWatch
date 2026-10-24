@@ -620,6 +620,45 @@ function recycle() {
   return { total: items.reduce((s, x) => s + x.size, 0), count: items.length, truncated: false, items };
 }
 
+let secReport: unknown = null;
+function securityRun() {
+  const c = (id: string, group: string, title: string, status: string, detail: string, why: string | null, fix: string | null, weight: number) => ({ id, group, title, status, detail, why, fix, weight });
+  const P = 'Защита Windows', U = 'Обновления', B = 'Шифрование и загрузка', A = 'Учётные записи', N = 'Сеть', G = 'Программы';
+  const checks = [
+    c('antivirus', P, 'Антивирус', 'ok', 'Работает: Microsoft Defender Antivirus.', null, null, 25),
+    c('defender-sig', P, 'Базы Защитника', 'ok', 'Обновлены 24 октября 2026, 18:02.', null, null, 8),
+    c('firewall', P, 'Брандмауэр', 'ok', 'Включён во всех сетях.', null, null, 20),
+    c('uac', P, 'Контроль учётных записей (UAC)', 'ok', 'Спрашивает подтверждение перед изменениями системы.', null, null, 15),
+    c('smartscreen', P, 'SmartScreen', 'ok', 'Проверяет скачанные программы.', null, null, 6),
+    c('coreiso', P, 'Изоляция ядра', 'warn', 'Целостность памяти выключена.', 'Защищает ядро от вредоносных драйверов. Иногда мешает старым драйверам — тогда Windows сама скажет, каким.', 'coreiso', 4),
+    c('winver', U, 'Поддержка Windows', 'bad', 'Windows 11 24H2: поддержка закончилась 13 октября 2026.', 'Эта версия больше не получает исправлений безопасности. Установите новую версию в Центре обновления.', 'update', 20),
+    c('lastupdate', U, 'Последнее обновление Windows', 'ok', '14 октября 2026 (10 дн. назад)', null, null, 15),
+    c('apps-updates', U, 'Обновления программ', 'warn', 'Можно обновить: Google Chrome, Telegram Desktop, 7-Zip, Node.js, Docker Desktop, VLC…', 'Старые версии браузеров, мессенджеров и плееров — частый путь заражения.', '#programs', 8),
+    c('secureboot', B, 'Secure Boot', 'ok', 'Включён: при загрузке запускается только подписанный загрузчик.', null, null, 6),
+    c('tpm', B, 'TPM', 'ok', 'Есть, версия 2.0.', null, null, 3),
+    c('bitlocker', B, 'BitLocker', 'warn', 'Системный диск C: не зашифрован.', 'Если ноутбук украдут, файлы можно прочитать, вынув диск. Сохраните ключ восстановления перед включением.', 'bitlocker', 8),
+    c('restore', B, 'Точки восстановления', 'ok', 'Точек: 3, последняя 21 октября 2026, 03:12.', null, null, 5),
+    c('admin', A, 'Ваша учётная запись', 'info', 'ANTRARES\\yurii — администратор.', 'Обычная ситуация дома. Безопаснее работать под обычной записью, а администратора держать отдельно.', 'accounts', 0),
+    c('builtin', A, 'Встроенные учётные записи', 'ok', 'Встроенный «Администратор» и «Гость» отключены.', null, null, 8),
+    c('autologon', A, 'Автоматический вход', 'ok', 'Выключен: при включении компьютер спрашивает пароль.', null, null, 10),
+    c('rdp', N, 'Удалённый рабочий стол', 'ok', 'Выключен.', null, null, 12),
+    c('smb1', N, 'SMBv1', 'ok', 'Отключён.', null, null, 10),
+    c('shares', N, 'Общие папки', 'ok', 'Нет открытых в сеть папок.', null, null, 4),
+    c('ports', N, 'Открытые порты', 'warn', 'Принимают соединения из сети: sqlservr (1433), node (5173), redis-server (6379).', 'Убедитесь, что это нужные программы (сервер разработки, игра, NAS). Подробнее — в «Соединениях».', '#connections', 6),
+    c('wifi', N, 'Wi-Fi', 'ok', 'Сеть «Magti_5G»: WPA2-Personal.', null, null, 10),
+    c('hosts', N, 'Файл hosts', 'ok', 'Без изменений.', null, null, 10),
+    c('proxy', N, 'Прокси', 'ok', 'Не задан: программы выходят в интернет напрямую.', null, null, 4),
+    c('dns', N, 'DNS-серверы', 'info', '192.168.1.1, 8.8.8.8', 'Через них компьютер узнаёт адреса сайтов. Незнакомые серверы, которые вы не ставили, — повод проверить роутер.', null, 0),
+    c('startup', G, 'Автозагрузка', 'warn', 'Без цифровой подписи: Sideloadly Daemon.', 'Неподписанная программа в автозагрузке — не обязательно вирус, но стоит знать, что это.', '#system', 8),
+    c('anomalies', G, 'Аномалии за неделю', 'ok', 'Важных нет (всего записей: 3).', null, null, 10),
+    c('remote', G, 'Программы удалённого доступа', 'info', 'Установлены: TeamViewer.', 'Удобно для поддержки, но через них же действуют мошенники («служба поддержки банка»). Удалите те, которыми не пользуетесь.', '#programs', 0),
+  ];
+  const prev = secReport as { ts: number; score: number } | null;
+  secReport = { ts: now(), score: 63, seconds: 7.4, checks, prevTs: prev?.ts ?? now() - 6 * 86400, prevScore: prev?.score ?? 58,
+    changes: prev ? [] : [{ id: 'firewall', title: 'Брандмауэр', from: 'bad', to: 'ok' }, { id: 'winver', title: 'Поддержка Windows', from: 'warn', to: 'bad' }] };
+  return secReport;
+}
+
 function diskGrowth() {
   return {
     since: now() - 7 * 86400,
@@ -715,6 +754,7 @@ export function mockApi(req: IncomingMessage, res: ServerResponse, next: () => v
   if (!req.url?.startsWith('/api/')) return next();
   const u = new URL(req.url, 'http://x');
   const range = Number(u.searchParams.get('range') ?? 60);
+  if (u.pathname === '/api/security') { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(secReport)); return; }
   const body = (() => {
     switch (u.pathname) {
       case '/api/live': return live();
@@ -853,6 +893,8 @@ export function mockApi(req: IncomingMessage, res: ServerResponse, next: () => v
       case '/api/disk/reveal': return { ok: true, message: 'Открыто.' };
       case '/api/search': if (req.method === 'POST') { searchAt = now(); return { started: true }; } return searchState();
       case '/api/search/cancel': return true;
+      case '/api/security/run': return securityRun();
+      case '/api/security/open': return { ok: true, message: 'Открыто.' };
       case '/api/recycle': return recycle();
       case '/api/recycle/empty': { const n = recycleItems.length; recycleItems = []; return { ok: true, message: 'Корзина очищена, освобождено 10,2 ГБ.', done: n, failed: 0 }; }
       case '/api/recycle/delete': case '/api/recycle/restore': { const n = recycleItems.length; recycleItems = recycleItems.slice(1); return { ok: true, message: u.pathname.endsWith('restore') ? 'Восстановлено: 1.' : 'Удалено навсегда: 1.', done: n - recycleItems.length, failed: 0 }; }

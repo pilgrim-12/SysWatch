@@ -16,7 +16,7 @@ const SEVERITY: Record<Finding['severity'], { label: string; cls: string }> = {
 };
 
 /** Кольцо с оценкой 0–100. */
-function ScoreRing({ score, color }: { score: number; color: string }) {
+export function ScoreRing({ score, color }: { score: number; color: string }) {
   const r = 70, len = 2 * Math.PI * r;
   return (
     <svg className="score-ring" viewBox="0 0 180 180" width="180" height="180" role="img" aria-label={t('Оценка {0} из 100', score)}>

@@ -198,6 +198,13 @@ export interface RecycleItem { id: string; name: string; original: string; isDir
 export interface RecycleView { total: number; count: number; truncated: boolean; items: RecycleItem[] }
 export interface RecycleResult { ok: boolean; message: string; done: number; failed: number }
 
+export type SecStatus = 'ok' | 'warn' | 'bad' | 'info' | 'skip';
+export interface SecCheck { id: string; group: string; title: string; status: SecStatus; detail: string; why: string | null; fix: string | null; weight: number }
+export interface SecReport {
+  ts: number; score: number; seconds: number; checks: SecCheck[];
+  prevTs: number | null; prevScore: number | null; changes: { id: string; title: string; from: SecStatus; to: SecStatus }[];
+}
+
 export interface DiskTree { path: string; size: number; delta: number | null; items: TreeItem[]; other: number }
 export interface Growth { since: number | null; items: { path: string; size: number; delta: number; isNew: boolean }[]; driveDelta: number }
 
@@ -501,6 +508,9 @@ export const api = {
   diskList: (path: string) => get<FolderListing>(`/api/disk/list?path=${encodeURIComponent(path)}`),
   diskLocate: (path: string) => get<{ path: string }>(`/api/disk/locate?path=${encodeURIComponent(path)}`),
   revealPath: (path: string) => postJson<{ ok: boolean; message: string }>(`/api/disk/reveal?path=${encodeURIComponent(path)}`),
+  security: () => get<SecReport | null>('/api/security'),
+  securityRun: () => postJson<SecReport>('/api/security/run'),
+  securityOpen: (id: string) => postJson<{ ok: boolean; message: string }>(`/api/security/open?id=${encodeURIComponent(id)}`),
   search: () => get<SearchState>('/api/search'),
   searchStart: (q: SearchQuery) => postBody<{ started: boolean }>('/api/search', q),
   searchCancel: () => post('/api/search/cancel'),

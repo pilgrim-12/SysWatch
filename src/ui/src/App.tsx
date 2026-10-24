@@ -3,7 +3,7 @@ import { api, type Live } from './api';
 import { ago, bytes, dayTime, pct } from './format';
 import { LANGS, lang, setLang, t, type Lang } from './i18n';
 import { Scopes, emptyHistory, pushLive, type LiveHistory } from './components/Scopes';
-import { BrandMark, IconAlert, IconApps, IconChip, IconDisk, IconHeat, IconLink, IconList, IconNet, IconClock, IconCode, IconGpu, IconPulse, IconReport, IconGauge, IconGear } from './components/Icons';
+import { BrandMark, IconAlert, IconApps, IconChip, IconDisk, IconHeat, IconLink, IconList, IconNet, IconClock, IconCode, IconGpu, IconPulse, IconReport, IconGauge, IconGear, IconShield } from './components/Icons';
 import { Now } from './screens/Now';
 import { Timeline } from './screens/Timeline';
 import { Network } from './screens/Network';
@@ -20,8 +20,9 @@ import { History } from './screens/History';
 import { Gpu } from './screens/Gpu';
 import { Overview } from './screens/Overview';
 import { Settings } from './screens/Settings';
+import { Security } from './screens/Security';
 
-type Screen = 'overview' | 'now' | 'connections' | 'timeline' | 'network' | 'anomalies' | 'disk' | 'programs' | 'system' | 'gpu' | 'report' | 'dev' | 'history' | 'events' | 'settings';
+type Screen = 'overview' | 'now' | 'connections' | 'timeline' | 'network' | 'anomalies' | 'security' | 'disk' | 'programs' | 'system' | 'gpu' | 'report' | 'dev' | 'history' | 'events' | 'settings';
 
 const NAV: { key: Screen; label: string; icon: () => JSX.Element }[] = [
   { key: 'overview', label: t('Обзор'), icon: IconGauge },
@@ -30,6 +31,7 @@ const NAV: { key: Screen; label: string; icon: () => JSX.Element }[] = [
   { key: 'timeline', label: t('Таймлайн'), icon: IconHeat },
   { key: 'network', label: t('Сеть'), icon: IconNet },
   { key: 'anomalies', label: t('Аномалии'), icon: IconAlert },
+  { key: 'security', label: t('Безопасность'), icon: IconShield },
   { key: 'disk', label: t('Диск'), icon: IconDisk },
   { key: 'programs', label: t('Программы'), icon: IconApps },
   { key: 'system', label: t('Система'), icon: IconChip },
@@ -71,6 +73,15 @@ export function App() {
 
   useEffect(() => writePref('screen', screen), [screen]);
 
+  // Меню слева можно свернуть до значков — как боковые панели в VS Code и Figma.
+  const [mini, setMini] = useState<boolean>(() => readPref('rail_mini', false));
+  useEffect(() => writePref('rail_mini', mini), [mini]);
+
+  const [compact, setCompact] = useState<boolean>(() => readPref('scopes_compact', false));
+  useEffect(() => writePref('scopes_compact', compact), [compact]);
+
+  useCollapsibleBlocks();
+
   // Переход по ссылке вида #anomalies — из уведомления или меню в трее.
   useEffect(() => {
     const fromHash = () => {
@@ -108,12 +119,18 @@ export function App() {
   const agent = live?.agent;
 
   return (
-    <div className="shell">
+    <div className={`shell${mini ? ' mini' : ''}`}>
       <nav className="rail" aria-label={t('Разделы')}>
-        <div className="brand"><BrandMark /> SysWatch</div>
+        <div className="brand">
+          <BrandMark /> <span className="nav-label">SysWatch</span>
+          <button className="rail-toggle" onClick={() => setMini(m => !m)}
+            title={mini ? t('Развернуть меню') : t('Свернуть меню')} aria-label={mini ? t('Развернуть меню') : t('Свернуть меню')} aria-expanded={!mini}>
+            {mini ? '»' : '«'}
+          </button>
+        </div>
         {NAV.map(n => (
-          <button key={n.key} className="nav-btn" aria-current={screen === n.key && !app ? 'page' : undefined} onClick={() => go(n.key)}>
-            <n.icon /> {n.label}
+          <button key={n.key} className="nav-btn" title={n.label} aria-current={screen === n.key && !app ? 'page' : undefined} onClick={() => go(n.key)}>
+            <n.icon /> <span className="nav-label">{n.label}</span>
             {n.key === 'anomalies' && unseen > 0 && <span className="nav-badge" aria-label={t('новых: {0}', unseen)}>{unseen}</span>}
           </button>
         ))}
@@ -144,13 +161,21 @@ export function App() {
       </nav>
 
       <main className="main">
-        <Scopes live={live} hist={hist} />
-        <div className="content">
+        <div className={`scopes-wrap${compact ? ' compact' : ''}`}>
+          <Scopes live={live} hist={hist} />
+          <button className="scopes-toggle" onClick={() => setCompact(c => !c)}
+            title={compact ? t('Показать графики') : t('Скрыть графики — только цифры')} aria-label={compact ? t('Показать графики') : t('Скрыть графики — только цифры')}>
+            {compact ? '▾' : '▴'}
+          </button>
+        </div>
+        <div className="content" data-screen={app ? 'app' : screen}>
           {liveError && !live && <div className="error">{t('Нет связи с SysWatch: {0}', liveError)}</div>}
           {app ? (
             <AppDetail name={app} range={range} setRange={setRange} onBack={() => setApp(null)} />
           ) : screen === 'settings' ? (
             <Settings />
+          ) : screen === 'security' ? (
+            <Security />
           ) : screen === 'overview' ? (
             <Overview />
           ) : screen === 'now' ? (
@@ -184,4 +209,54 @@ export function App() {
       </main>
     </div>
   );
+}
+
+/**
+ * Любой блок раздела (section.block с заголовком h2) сворачивается кликом по заголовку или Enter/Пробелом.
+ * Состояние запоминается для каждого раздела отдельно. Кнопки и переключатели внутри заголовка работают как обычно.
+ */
+function useCollapsibleBlocks() {
+  useEffect(() => {
+    const KEY = 'collapsed_blocks';
+    const load = (): Set<string> => new Set(readPref<string[]>(KEY, []));
+    let closed = load();
+    const keyOf = (h: HTMLElement) => {
+      const screen = (h.closest('.content') as HTMLElement | null)?.dataset.screen ?? '';
+      const title = (h.childNodes[0]?.textContent ?? '').trim() || (h.textContent ?? '').trim().slice(0, 40);
+      return `${screen}|${title}`;
+    };
+    const apply = () => {
+      document.querySelectorAll<HTMLElement>('.content .block > h2').forEach(h => {
+        const sec = h.parentElement!;
+        const shut = closed.has(keyOf(h));
+        sec.classList.toggle('collapsed', shut);
+        if (h.getAttribute('aria-expanded') !== String(!shut)) h.setAttribute('aria-expanded', String(!shut));
+        if (!h.hasAttribute('tabindex')) { h.tabIndex = 0; h.setAttribute('role', 'button'); h.classList.add('collapsible'); }
+      });
+    };
+    const toggle = (h: HTMLElement) => {
+      const k = keyOf(h);
+      if (closed.has(k)) closed.delete(k); else closed.add(k);
+      writePref(KEY, [...closed]);
+      apply();
+    };
+    const fromEvent = (e: Event) => {
+      const el = e.target as HTMLElement;
+      if (el.closest('button, a, input, select, label, .seg, .btn')) return null;
+      return el.closest<HTMLElement>('.content .block > h2');
+    };
+    const onClick = (e: MouseEvent) => { const h = fromEvent(e); if (h) toggle(h); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const h = e.target as HTMLElement;
+      if (h.matches?.('.content .block > h2')) { e.preventDefault(); toggle(h); }
+    };
+    let raf = 0;
+    const mo = new MutationObserver(() => { cancelAnimationFrame(raf); raf = requestAnimationFrame(apply); });
+    mo.observe(document.body, { childList: true, subtree: true });
+    document.addEventListener('click', onClick);
+    document.addEventListener('keydown', onKey);
+    apply();
+    return () => { mo.disconnect(); document.removeEventListener('click', onClick); document.removeEventListener('keydown', onKey); cancelAnimationFrame(raf); };
+  }, []);
 }

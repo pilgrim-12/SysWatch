@@ -38,7 +38,7 @@
 | `Disk` | снимок диска (`DiskScanner`, `DiskStore`), очистка, поиск файлов, файлы в папке, Корзина |
 | `Anomalies` | правила (`Detector`) и хранилище (`AnomalyStore`) |
 | `Reports` | оценка здоровья (`Health`), отчёты, PDF через WebView2 |
-| `Sys` | сведения о компьютере, сбои, автозагрузка, точки восстановления |
+| `Sys` | сведения о компьютере, проверка безопасности (`SecurityAudit`), сбои, автозагрузка, точки восстановления |
 | `Programs` | установленные программы, winget |
 | `Browsing` | история браузеров (копия базы, только чтение) |
 | `Dev` | SDK, Docker, `node_modules` |
@@ -60,6 +60,7 @@ React 18 + TypeScript + Vite, графики — uPlot, карта мира — 
 | `hot\YYYY-MM-DD.db` | данные агента за день |
 | `disk.db` | снимки диска |
 | `anomalies.db` | найденные аномалии |
+| `security.json` | последний результат проверки безопасности (для сравнения) |
 | `settings.json` | срок хранения, пороги оповещений (читает и агент) |
 | `geo\dbip-country-lite.csv.gz` | база «IP → страна», если скачана |
 
@@ -116,6 +117,7 @@ GROUP BY p.image ORDER BY mb_in DESC LIMIT 10;
 | Поиск и Корзина | `search` (GET состояние / POST запуск), `search/cancel`, `recycle`, `recycle/restore`, `recycle/delete`, `recycle/empty` |
 | Система | `system/info`, `system/restore`, `system/restore/create`, `system/startup`, `system/startup/toggle`, `system/disks`, `system/battery`, `system/wakes`, `system/crashes`, `system/cpu` |
 | Программы | `programs`, `programs/uninstall`, `updates`, `updates/install`, `process/kill`, `process/priority`, `process/reveal` |
+| Безопасность | `security` (последний результат), `security/run`, `security/open?id=` (только из белого списка настроек) |
 | Сеть | `firewall`, `firewall/status`, `firewall/block`, `firewall/unblock` |
 | Прочее | `history*`, `dev*`, `report/*`, `settings`, `settings/lang` |
 

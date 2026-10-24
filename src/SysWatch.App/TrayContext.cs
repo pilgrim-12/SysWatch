@@ -67,9 +67,11 @@ public sealed class TrayContext : ApplicationContext
         var health = new Health(_queries, _insights, _anomalies, _disk, startup, dev, gpuQueries);
         _reports = new ReportCenter(health, _insights, _queries, _anomalies, startup, firewall, dev, _disk);
         _history = new BrowserHistory(_anomalies);
+        var updates = new Updates();
         _api = new Api(_queries, _live, _anomalies, _disk, connections, installed, firewall, _geo,
             startup, _hardware, _insights, dev, _history, gpuQueries, health, _reports,
-            settings, new Updates(), new GeoTraffic(files, _geo, settings), new SystemInfo());
+            settings, updates, new GeoTraffic(files, _geo, settings), new SystemInfo(),
+            new SecurityAudit(startup, installed, updates, _anomalies));
         _detector = new Detector(files, signatures, _anomalies);
 
         L.SetDefault(_anomalies.Get("ui_lang")); // язык, выбранный в окне

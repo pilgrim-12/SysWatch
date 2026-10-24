@@ -1096,3 +1096,133 @@ pre.log { margin: 6px 0 0; white-space: pre-wrap; font-size: 12px; color: var(--
 .plot-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 8px 14px 0; font-size: 12px; color: var(--muted); }
 .plot-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .plot-legend i { width: 14px; height: 3px; border-radius: 2px; }
+
+/* ── Любой размер окна ─────────────────────────────────
+   Широкое: как было. Невысокое (ноутбук 125–150%): меньше отступы, графики сверху уезжают вместе с прокруткой.
+   Узкое: меню — только значки, графики листаются вбок. Очень узкое: меню — полоса сверху. */
+.rail { overflow-y: auto; overflow-x: hidden; min-height: 0; scrollbar-width: thin; }
+.shell { min-height: 0; }
+.scope-value { white-space: nowrap; font-size: clamp(18px, 1.7vw, 26px); }
+.scope-read { gap: 6px; }
+.head { flex-wrap: wrap; }
+.head-tools { flex-wrap: wrap; }
+.block > h2 { flex-wrap: wrap; row-gap: 6px; }
+.content img, .content svg { max-width: 100%; }
+
+@media (max-height: 820px) {
+  .main { overflow-y: auto; }
+  .content { flex: none; overflow: visible; padding-top: 14px; }
+  .scope { height: 104px; }
+  .scope-plot { inset: 50px 0 0 0; }
+  .brand { padding-bottom: 10px; }
+  .nav-btn { padding: 6px 10px; font-size: 14px; }
+  .rail { padding: 12px 8px; }
+  .rail-foot { font-size: 12px; }
+}
+
+@media (max-width: 1250px) {
+  .scopes, .scopes.five { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(190px, 1fr); overflow-x: auto; scrollbar-width: thin; }
+  .scope { height: 104px; }
+  .scope-plot { inset: 50px 0 0 0; }
+}
+
+@media (max-width: 1000px) {
+  .shell { grid-template-columns: 60px 1fr; }
+  .rail { padding: 12px 6px; align-items: center; }
+  .nav-label, .lang-pick span, .rail-foot { display: none; }
+  .nav-btn { justify-content: center; padding: 9px 0; }
+  .brand { padding: 0 0 12px; justify-content: center; }
+  .lang-pick { margin: auto 0 6px; }
+  .lang-pick .select { width: 48px; padding: 3px 2px; font-size: 12px; }
+  .nav-badge { position: absolute; margin: -18px 0 0 18px; }
+  .nav-btn { position: relative; }
+  .content { padding: 14px 14px 28px; }
+  .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid-2, .grid-2-even, .charts-4, .hero { grid-template-columns: 1fr; }
+  .fsearch-row, .rbin-row, .ffiles-row { grid-template-columns: minmax(0, 1fr) 80px 110px; }
+  .fsearch-row > :nth-child(4), .ffiles-row > :nth-child(4) { grid-column: 1 / -1; justify-self: start; }
+  .rbin-row { grid-template-columns: 22px minmax(0, 1fr) 80px; }
+  .rbin-row > :nth-child(4) { grid-column: 2 / -1; }
+}
+
+@media (max-width: 640px) {
+  .shell { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+  .rail { flex-direction: row; overflow-x: auto; overflow-y: hidden; border-right: 0; border-bottom: 1px solid var(--grid); padding: 6px; gap: 2px; }
+  .brand, .lang-pick { display: none; }
+  .nav-btn { flex: none; width: 44px; }
+  .facts { grid-template-columns: 1fr; }
+  .head h1 { font-size: 20px; }
+  .fsearch-form > * { flex: 1 1 140px; }
+}
+
+/* ── Безопасность ── */
+.sec-hero { grid-template-columns: minmax(320px, 1fr) 2fr; }
+.sec-sum { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: flex-start; padding: 16px 20px; }
+.sec-count { display: flex; flex-direction: column; min-width: 90px; }
+.sec-count b { font-size: 30px; font-weight: 600; line-height: 1.1; }
+.sec-count span { color: var(--muted); font-size: 13px; }
+.sec-count.bad b { color: var(--warn); }
+.sec-count.warn b { color: var(--cpu); }
+.sec-count.ok b { color: var(--ok); }
+.sec-count.info b { color: var(--net); }
+.sec-changes { flex-basis: 100%; border-top: 1px solid var(--grid); padding-top: 10px; font-size: 13px; }
+.sec-changes h3 { margin: 0 0 4px; font-size: 13px; color: var(--muted); font-weight: 500; }
+.up-good { color: var(--ok); }
+.down-bad { color: var(--warn); }
+.sec-filter { margin: 0 0 14px; }
+.sec-row { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 12px 16px; border-bottom: 1px solid var(--grid); }
+.sec-row:last-child { border-bottom: 0; }
+.sec-row.bad { background: rgb(242 124 107 / 0.06); }
+.sec-icon { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; }
+.sec-icon.ok { background: rgb(107 207 142 / 0.18); color: var(--ok); }
+.sec-icon.warn { background: rgb(242 181 68 / 0.2); color: var(--cpu); }
+.sec-icon.bad { background: rgb(242 124 107 / 0.22); color: var(--warn); }
+.sec-icon.info { background: rgb(79 195 217 / 0.18); color: var(--net); }
+.sec-icon.skip { background: var(--panel-2); color: var(--faint); }
+.sec-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sec-title { font-weight: 600; }
+@media (max-width: 1000px) { .sec-hero { grid-template-columns: 1fr; } .sec-row { grid-template-columns: 28px minmax(0, 1fr); } .sec-row .btn { grid-column: 2; justify-self: start; } }
+
+/* ── Сворачиваемые блоки ── */
+.block > h2.collapsible { cursor: pointer; user-select: none; border-radius: var(--r-sm); }
+.block > h2.collapsible::before {
+  content: ''; flex: none; width: 7px; height: 7px; margin: 0 4px 0 2px;
+  border-right: 2px solid var(--faint); border-bottom: 2px solid var(--faint);
+  transform: rotate(45deg) translate(-2px, -2px); transition: transform .15s ease;
+}
+.block.collapsed > h2.collapsible::before { transform: rotate(-45deg); }
+.block > h2.collapsible:hover::before { border-color: var(--paper); }
+.block.collapsed > :not(h2) { display: none !important; }
+.block.collapsed { margin-bottom: 10px; }
+.block.collapsed > h2 { opacity: .8; }
+
+/* ── Меню: свернуть до значков ── */
+.brand { position: relative; }
+.rail-toggle {
+  margin-left: auto; width: 24px; height: 24px; border: 0; border-radius: var(--r-sm);
+  background: none; color: var(--faint); cursor: pointer; font-size: 15px; line-height: 1;
+}
+.rail-toggle:hover { background: var(--panel); color: var(--paper); }
+.shell.mini { grid-template-columns: 60px 1fr; }
+.shell.mini .rail { padding: 12px 6px; align-items: center; }
+.shell.mini .nav-label, .shell.mini .lang-pick span, .shell.mini .rail-foot { display: none; }
+.shell.mini .nav-btn { justify-content: center; padding: 9px 0; position: relative; }
+.shell.mini .brand { padding: 0 0 12px; flex-direction: column; gap: 6px; }
+.shell.mini .rail-toggle { margin: 0; }
+.shell.mini .lang-pick { margin: auto 0 6px; }
+.shell.mini .lang-pick .select { width: 48px; padding: 3px 2px; font-size: 12px; }
+.shell.mini .nav-badge { position: absolute; margin: -18px 0 0 18px; }
+@media (max-width: 1000px) { .brand { flex-direction: column; gap: 6px; } .rail-toggle { display: none; } }
+
+/* ── Верхняя полоса: можно свернуть до цифр ── */
+.scopes-wrap { position: relative; flex: none; }
+.scopes-toggle {
+  position: absolute; right: 6px; bottom: 4px; z-index: 3; width: 22px; height: 18px; padding: 0;
+  border: 1px solid var(--grid); border-radius: var(--r-sm); background: var(--panel); color: var(--muted);
+  font-size: 11px; line-height: 1; cursor: pointer; opacity: .55;
+}
+.scopes-wrap:hover .scopes-toggle, .scopes-toggle:focus-visible { opacity: 1; }
+.scopes-wrap.compact .scope { height: 48px; }
+.scopes-wrap.compact .scope-plot, .scopes-wrap.compact .scope-sub { display: none; }
+.scopes-wrap.compact .scope-read { top: 10px; align-items: center; }
+.scopes-wrap.compact .scope-value { font-size: 20px; }

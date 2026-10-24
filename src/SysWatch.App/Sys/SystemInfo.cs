@@ -47,7 +47,7 @@ public sealed class SystemInfo
 
     // ── WMI и реестр ─────────────────────────────────────────────────────
 
-    private static List<ManagementBaseObject> Wmi(string query, string scope = @"root\cimv2")
+    internal static List<ManagementBaseObject> Wmi(string query, string scope = @"root\cimv2")
     {
         var list = new List<ManagementBaseObject>();
         try
@@ -59,7 +59,7 @@ public sealed class SystemInfo
         return list;
     }
 
-    private static string? S(ManagementBaseObject? o, string prop)
+    internal static string? S(ManagementBaseObject? o, string prop)
     {
         try
         {
@@ -71,26 +71,26 @@ public sealed class SystemInfo
         catch (Exception) { return null; }
     }
 
-    private static long? N(ManagementBaseObject? o, string prop)
+    internal static long? N(ManagementBaseObject? o, string prop)
     {
         try { var v = o?[prop]; return v is null ? null : Convert.ToInt64(v, CultureInfo.InvariantCulture); }
         catch (Exception) { return null; }
     }
 
-    private static bool? B(ManagementBaseObject? o, string prop)
+    internal static bool? B(ManagementBaseObject? o, string prop)
     {
         try { var v = o?[prop]; return v is null ? null : Convert.ToBoolean(v, CultureInfo.InvariantCulture); }
         catch (Exception) { return null; }
     }
 
-    private static object? Reg(string key, string name)
+    internal static object? Reg(string key, string name)
     {
         try { return Registry.GetValue(key, name, null); } catch (Exception) { return null; }
     }
 
     private static string Date(DateTime? d) => d is { } v ? v.ToString("d MMMM yyyy", L.Culture) : "—";
-    private static string DateTimeText(DateTime? d) => d is { } v ? v.ToString("d MMMM yyyy, HH:mm", L.Culture) : "—";
-    private static DateTime? Dmtf(string? s)
+    internal static string DateTimeText(DateTime? d) => d is { } v ? v.ToString("d MMMM yyyy, HH:mm", L.Culture) : "—";
+    internal static DateTime? Dmtf(string? s)
     {
         if (string.IsNullOrEmpty(s)) return null;
         try { return ManagementDateTimeConverter.ToDateTime(s); } catch (Exception) { return null; }
