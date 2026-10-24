@@ -10,6 +10,8 @@ export interface LiveHistory {
   mem: number[];
   disk: number[];
   net: number[];
+  /** Загрузка каждой видеокарты по имени, выровнена с ts. */
+  gpu: Record<string, number[]>;
 }
 
 export const HISTORY = 120; // 2 минуты по 1 секунде
@@ -22,10 +24,15 @@ export function pushLive(h: LiveHistory, l: Live): LiveHistory {
     mem: cut(h.mem, (l.memUsed / l.memTotal) * 100),
     disk: cut(h.disk, l.diskRead + l.diskWrite),
     net: cut(h.net, l.netRx + l.netTx),
+    gpu: Object.fromEntries((l.gpus ?? []).map(g => [g.name, [
+      ...Array(Math.max(0, Math.min(HISTORY - 1, h.ts.length) - (h.gpu[g.name]?.length ?? 0))).fill(0),
+      ...(h.gpu[g.name] ?? []),
+      g.util,
+    ].slice(-HISTORY)])),
   };
 }
 
-export const emptyHistory = (): LiveHistory => ({ ts: [], cpu: [], mem: [], disk: [], net: [] });
+export const emptyHistory = (): LiveHistory => ({ ts: [], cpu: [], mem: [], disk: [], net: [], gpu: {} });
 
 interface ScopeProps {
   name: string;
@@ -35,12 +42,18 @@ interface ScopeProps {
   ts: number[];
   values: number[];
   yMax?: number;
+  /** Несколько линий вместо одной: видеокарты. */
+  multi?: { label: string; color: string; values: number[] }[];
+  href?: string;
 }
 
-function Scope({ name, value, sub, color, ts, values, yMax }: ScopeProps) {
-  const series = useMemo(() => [{ label: name, color, values, fill: true }], [name, color, values]);
+function Scope({ name, value, sub, color, ts, values, yMax, multi, href }: ScopeProps) {
+  const series = useMemo(
+    () => multi?.length ? multi.map((m, i) => ({ ...m, fill: i === 0 })) : [{ label: name, color, values, fill: true }],
+    [name, color, values, multi]);
+  const Tag = href ? 'a' : 'div';
   return (
-    <div className="scope">
+    <Tag className={`scope${href ? ' link-scope' : ''}`} {...(href ? { href, title: t('Открыть раздел «Видеокарта»') } : {})}>
       <div className="scope-read">
         <div>
           <div className="scope-name">{name}</div>
@@ -51,15 +64,32 @@ function Scope({ name, value, sub, color, ts, values, yMax }: ScopeProps) {
       <div className="scope-plot">
         {ts.length > 1 && <Plot ts={ts} series={series} height={76} axes={false} glow yMax={yMax} />}
       </div>
-    </div>
+    </Tag>
   );
 }
 
-/** Верхняя полоса: четыре живых графика за последние 2 минуты. */
+export const GPU_COLORS = [COLOR.gpu, '#f5a3d0', '#9cc4ff', COLOR.gpu2];
+/** «NVIDIA GeForce RTX 4060 Laptop GPU» → «RTX 4060», «Intel(R) UHD Graphics 620» → «Intel UHD 620». */
+export function shortGpu(name: string) {
+  const intel = /intel/i.test(name);
+  const n = name
+    .replace(/\((R|TM)\)/gi, ' ')
+    .replace(/\b(NVIDIA|GeForce|AMD|Intel|Laptop|GPU|Graphics|Corporation)\b/gi, ' ')
+    .replace(/\s+/g, ' ').trim();
+  const s = n ? (intel ? `Intel ${n}` : n) : name.trim();
+  return s.length > 22 ? s.slice(0, 21) + '…' : s;
+}
+
+/** Верхняя полоса: живые графики за последние 2 минуты; видеокарта — если Windows отдаёт её счётчики. */
 export function Scopes({ live, hist }: { live: Live | null; hist: LiveHistory }) {
   const peak = (a: number[]) => Math.max(0, ...a);
+  const gpus = live?.gpus ?? [];
+  const gpuMulti = useMemo(() => gpus.map((g, i) => ({ label: g.name, color: GPU_COLORS[i % GPU_COLORS.length], values: hist.gpu[g.name] ?? [] })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [hist]);
+  const top = gpus.reduce((m, g) => Math.max(m, g.util), 0);
   return (
-    <div className="scopes">
+    <div className={`scopes${gpus.length ? ' five' : ''}`}>
       <Scope name={t('Процессор')} color={COLOR.cpu} ts={hist.ts} values={hist.cpu} yMax={100}
         value={live ? pct(live.cpu, 0) : '—'}
         sub={live ? plural(live.apps.reduce((s, a) => s + a.count, 0), 'процесс', 'процесса', 'процессов') : ''} />
@@ -72,6 +102,13 @@ export function Scopes({ live, hist }: { live: Live | null; hist: LiveHistory })
       <Scope name={t('Сеть')} color={COLOR.net} ts={hist.ts} values={hist.net}
         value={live ? rate(live.netRx + live.netTx) : '—'}
         sub={live ? `↓ ${rate(live.netRx)}  ↑ ${rate(live.netTx)}` : ''} />
+      {gpus.length > 0 && (
+        <Scope name={gpus.length > 1 ? t('Видеокарты') : t('Видеокарта')} color={COLOR.gpu} ts={hist.ts} values={[]} yMax={100} multi={gpuMulti} href="#gpu"
+          value={pct(top, 0)}
+          sub={gpus.length > 1
+            ? gpus.map(g => `${shortGpu(g.name)} ${Math.round(g.util)}%`).join(' · ')
+            : t('{0} · память {1}', shortGpu(gpus[0].name), bytes(gpus[0].memUsed))} />
+      )}
     </div>
   );
 }

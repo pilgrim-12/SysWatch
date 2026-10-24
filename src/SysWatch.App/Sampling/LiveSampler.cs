@@ -17,6 +17,7 @@ public sealed class LiveSampler : IDisposable
 
     private readonly object _gate = new();
     private readonly Pdh _pdh = new(DiskRead, DiskWrite);
+    private readonly GpuLive _gpu = new();
     private readonly uint[] _pids = new uint[8192];
     private readonly char[] _buf = new char[1024];
     private readonly Dictionary<(int Pid, long Create), Prev> _prev = new();
@@ -49,7 +50,7 @@ public sealed class LiveSampler : IDisposable
                 DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
                 cpu, memUsed, memTotal,
                 _pdh.Get(DiskRead), _pdh.Get(DiskWrite),
-                rx, tx, apps, agent);
+                rx, tx, apps, agent, Gpus());
         }
     }
 
@@ -208,5 +209,10 @@ public sealed class LiveSampler : IDisposable
         return null;
     }
 
-    public void Dispose() => _pdh.Dispose();
+    private IReadOnlyList<LiveGpu> Gpus()
+    {
+        try { return _gpu.Sample(); } catch (Exception) { return []; }
+    }
+
+    public void Dispose() { _pdh.Dispose(); _gpu.Dispose(); }
 }

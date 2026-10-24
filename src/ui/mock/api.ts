@@ -78,6 +78,10 @@ function live() {
     netTx: 120 * KB * noise(t * 0.9),
     apps,
     agent: { running: true, lastWrite: t - 20, cpu: 0.48, ram: 31 * MB, eventsLost: 0 },
+    gpus: [
+      { name: 'NVIDIA GeForce RTX 4060 Laptop GPU', util: Math.round(8 + 60 * noise(t / 7)), memUsed: 2.1 * GB, memTotal: 8 * GB },
+      { name: 'Intel(R) UHD Graphics', util: Math.round(3 + 12 * noise(t / 3 + 5)), memUsed: 0.4 * GB, memTotal: 0.1 * GB },
+    ],
   };
 }
 
@@ -94,6 +98,10 @@ function timeline(range: number) {
     system: {
       cpu: mins.map((t, k) => t < AGENT_SINCE() ? null : Math.min(100, 5 + apps.reduce((s, a) => s + a.cpu[k], 0))),
       mem: mins.map(t => t < AGENT_SINCE() ? null : 72 + 10 * noise(t / 1800)),
+      gpu: [
+        { name: 'NVIDIA GeForce RTX 4060 Laptop GPU', util: mins.map(t => t < AGENT_SINCE() ? null : Math.round(4 + 55 * Math.pow(noise(t / 1200), 3))) },
+        { name: 'Intel(R) UHD Graphics', util: mins.map(t => t < AGENT_SINCE() ? null : Math.round(2 + 14 * noise(t / 600 + 3))) },
+      ],
     },
     apps,
   };

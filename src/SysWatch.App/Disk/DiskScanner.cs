@@ -16,7 +16,7 @@ public sealed class DiskScanner
     {
         IgnoreInaccessible = true,
         RecurseSubdirectories = false,
-        AttributesToSkip = FileAttributes.ReparsePoint, // скрытые и системные файлы считаем: pagefile, hiberfil
+        AttributesToSkip = 0, // скрытые и системные считаем (pagefile, hiberfil); ссылки отсекаем ниже — по цели, а не по атрибуту
         ReturnSpecialDirectories = false,
     };
 
@@ -63,11 +63,13 @@ public sealed class DiskScanner
         {
             foreach (var e in new DirectoryInfo(dir).EnumerateFileSystemInfos("*", Opts))
             {
-                if ((e.Attributes & FileAttributes.ReparsePoint) != 0) continue;
+                // Ссылки и точки соединения не обходим — иначе считали бы одно и то же дважды.
+                // Но OneDrive (рабочий стол, документы) тоже помечен как reparse point — это не ссылка, его считаем.
+                if ((e.Attributes & FileAttributes.ReparsePoint) != 0 && IsLink(e)) continue;
                 if (e is FileInfo f)
                 {
                     long len;
-                    try { len = f.Length; } catch { continue; }
+                    try { len = OnlyInCloud(f.Attributes) ? 0 : f.Length; } catch { continue; }
                     size += len;
                     files++;
                     _bytes += len;
@@ -102,6 +104,17 @@ public sealed class DiskScanner
             _nodes.Add(new DiskNode(dir, parent, true, size, files));
         return (size, files);
     }
+
+    /// <summary>Символическая ссылка или точка соединения (junction). Облачные заглушки OneDrive ссылками не являются.</summary>
+    public static bool IsLink(FileSystemInfo e)
+    {
+        try { return e.LinkTarget is not null; }
+        catch (Exception) { return true; } // не смогли прочитать — безопаснее пропустить
+    }
+
+    /// <summary>Файл OneDrive «только в облаке»: на диске не занимает места, скачается при открытии.</summary>
+    public static bool OnlyInCloud(FileAttributes a) =>
+        ((int)a & (0x00400000 /* RECALL_ON_DATA_ACCESS */ | 0x00040000 /* RECALL_ON_OPEN */)) != 0 || a.HasFlag(FileAttributes.Offline);
 
     /// <summary>Сколько точки восстановления (теневые копии) занимают на диске root. null — не удалось узнать.</summary>
     public static long? ShadowStorage(string root)

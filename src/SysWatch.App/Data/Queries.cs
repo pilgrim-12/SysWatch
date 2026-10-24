@@ -128,6 +128,12 @@ public sealed class Queries(DayFiles files, Signatures signatures, Func<HashSet<
         return cov;
     }
 
+    /// <summary>Виртуальные адаптеры (базовый драйвер Microsoft, удалённый рабочий стол) — не видеокарты.</summary>
+    private static bool VirtualGpu(string name) =>
+        name.Contains("Basic Render", StringComparison.OrdinalIgnoreCase) || name.Contains("Basic Display", StringComparison.OrdinalIgnoreCase) ||
+        name.Contains("Remote Display", StringComparison.OrdinalIgnoreCase) || name.Contains("Indirect Display", StringComparison.OrdinalIgnoreCase) ||
+        name.Contains("Virtual", StringComparison.OrdinalIgnoreCase) || name.Contains("Parsec", StringComparison.OrdinalIgnoreCase);
+
     public Timeline Timeline(int range)
     {
         long from = FromRange(range);
@@ -140,6 +146,7 @@ public sealed class Queries(DayFiles files, Signatures signatures, Func<HashSet<
         var mem = new Dictionary<string, double[]>(StringComparer.OrdinalIgnoreCase);
         var net = new Dictionary<string, double[]>(StringComparer.OrdinalIgnoreCase);
         double[] Arr(Dictionary<string, double[]> d, string k) => d.TryGetValue(k, out var a) ? a : d[k] = new double[n];
+        var gpuSum = new Dictionary<string, (double[] Sum, int[] N)>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var (_, path) in files.For(from))
         {
@@ -153,6 +160,17 @@ public sealed class Queries(DayFiles files, Signatures signatures, Func<HashSet<
                 if (i < 0) continue;
                 sysCpu[i] += r.Dbl0(1); sysMem[i] += r.Dbl0(2); sysN[i]++;
             }
+
+            // Видеокарты: одна карта может прийти под разными LUID (после перезагрузки) — сводим по имени.
+            if (c.HasColumn("gpu_1m", "util"))
+                foreach (var r in c.Cmd("SELECT ts, name, MAX(util) FROM gpu_1m WHERE ts >= $from GROUP BY ts, name", ("$from", from)).Rows())
+                {
+                    int i = bins.Index(r.GetInt64(0));
+                    var gname = r.StrOrNull(1);
+                    if (i < 0 || gname is null || VirtualGpu(gname)) continue;
+                    if (!gpuSum.TryGetValue(gname, out var g)) gpuSum[gname] = g = (new double[n], new int[n]);
+                    g.Sum[i] += r.Dbl0(2); g.N[i]++;
+                }
 
             foreach (var r in c.Cmd($"""
                 SELECT p.image, m.ts, SUM(m.cpu_ms), SUM(m.{memCol}), SUM(m.net_tx + m.net_rx)
@@ -184,7 +202,10 @@ public sealed class Queries(DayFiles files, Signatures signatures, Func<HashSet<
         var apps = keep.Select(k => new TimelineApp(k, Arr(cpu, k), Arr(mem, k), Arr(net, k))).ToList();
         var system = new TimelineSystem(
             Enumerable.Range(0, n).Select(i => sysN[i] > 0 ? sysCpu[i] / sysN[i] : (double?)null).ToArray(),
-            Enumerable.Range(0, n).Select(i => sysN[i] > 0 ? sysMem[i] / sysN[i] : (double?)null).ToArray());
+            Enumerable.Range(0, n).Select(i => sysN[i] > 0 ? sysMem[i] / sysN[i] : (double?)null).ToArray(),
+            gpuSum.OrderByDescending(kv => kv.Value.Sum.Sum())
+                .Select(kv => new TimelineGpu(kv.Key, Enumerable.Range(0, n).Select(i => kv.Value.N[i] > 0 ? Math.Round(kv.Value.Sum[i] / kv.Value.N[i], 1) : (double?)null).ToArray()))
+                .ToList());
 
         return new Timeline(bins.Starts, system, apps);
     }

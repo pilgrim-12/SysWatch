@@ -81,11 +81,13 @@ public sealed class FileSearch
     public static Func<string, bool> NameMatcher(string text)
     {
         if (text.Length == 0) return _ => true;
-        var parts = text.Split(new[] { ' ', ';', ',' }, StringSplitOptions.RemoveEmptyEntries);
+        // «.pdf» — то же, что «*.pdf». Несколько масок — любая из них (*.mp4 *.mkv), слова — все сразу.
+        var parts = text.Split(new[] { ' ', ';', ',' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(p => p.Length > 1 && p[0] == '.' && !p.Contains('*') ? "*" + p : p).ToArray();
         var masks = parts.Where(p => p.Contains('*') || p.Contains('?')).ToArray();
         var words = parts.Except(masks).ToArray();
         return name =>
-            masks.All(m => FileSystemName.MatchesSimpleExpression(m, name, ignoreCase: true)) &&
+            (masks.Length == 0 || masks.Any(m => FileSystemName.MatchesSimpleExpression(m, name, ignoreCase: true))) &&
             words.All(w => name.Contains(w, StringComparison.OrdinalIgnoreCase));
     }
 
@@ -101,7 +103,7 @@ public sealed class FileSearch
         {
             IgnoreInaccessible = true,
             RecurseSubdirectories = true,
-            AttributesToSkip = FileAttributes.ReparsePoint,
+            AttributesToSkip = 0, // OneDrive — reparse point, но не ссылка: его обходим, ссылки отсекаем ниже
             ReturnSpecialDirectories = false,
         };
 
@@ -117,6 +119,7 @@ public sealed class FileSearch
                     ShouldRecursePredicate = (ref FileSystemEntry x) =>
                     {
                         if (ct.IsCancellationRequested) return false;
+                        if ((x.Attributes & FileAttributes.ReparsePoint) != 0 && DiskScanner.IsLink(new DirectoryInfo(x.ToFullPath()))) return false;
                         if (Interlocked.Increment(ref _dirs) % 200 == 0) _current = x.ToFullPath();
                         return true;
                     },

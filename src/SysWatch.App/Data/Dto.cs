@@ -9,7 +9,10 @@ public sealed record LiveApp(string Name, int Count, double Cpu, long Mem, doubl
 public sealed record Live(
     long Ts, double Cpu, long MemUsed, long MemTotal,
     double DiskRead, double DiskWrite, double NetRx, double NetTx,
-    IReadOnlyList<LiveApp> Apps, AgentStatus Agent);
+    IReadOnlyList<LiveApp> Apps, AgentStatus Agent, IReadOnlyList<LiveGpu> Gpus);
+
+/// <summary>Живая загрузка одной видеокарты: максимум по типам движков, как в Диспетчере задач.</summary>
+public sealed record LiveGpu(string Name, double Util, long MemUsed, long MemTotal);
 
 public sealed record AppTotals(
     string Name, double CpuPct, long MemMax, long IoRead, long IoWrite, long NetTx, long NetRx, int Domains);
@@ -21,7 +24,10 @@ public sealed record Overview(IReadOnlyList<AppTotals> Apps, IReadOnlyList<doubl
 
 public sealed record TimelineApp(string Name, double[] Cpu, double[] Mem, double[] Net);
 
-public sealed record TimelineSystem(double?[] Cpu, double?[] Mem);
+/// <param name="Gpu">Загрузка каждой видеокарты, % по минутам (пусто — агент её не писал).</param>
+public sealed record TimelineSystem(double?[] Cpu, double?[] Mem, IReadOnlyList<TimelineGpu> Gpu);
+
+public sealed record TimelineGpu(string Name, double?[] Util);
 
 public sealed record Timeline(long[] Minutes, TimelineSystem System, IReadOnlyList<TimelineApp> Apps);
 

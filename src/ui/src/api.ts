@@ -23,7 +23,10 @@ export interface Live {
   netTx: number;
   apps: LiveApp[];
   agent: AgentStatus;
+  /** Видеокарты: загрузка %, видеопамять. Пусто — счётчиков нет (старая Windows, виртуальная машина). */
+  gpus?: LiveGpu[];
 }
+export interface LiveGpu { name: string; util: number; memUsed: number; memTotal: number }
 
 export interface AgentStatus {
   running: boolean;   // писал ли агент данные за последние 3 минуты
@@ -53,7 +56,8 @@ export interface TimelineApp {
 
 export interface Timeline {
   minutes: number[];
-  system: { cpu: number[]; mem: number[] };
+  /** gpu — загрузка каждой видеокарты по минутам; нет у старых версий агента. */
+  system: { cpu: number[]; mem: number[]; gpu?: { name: string; util: (number | null)[] }[] };
   apps: TimelineApp[];
 }
 

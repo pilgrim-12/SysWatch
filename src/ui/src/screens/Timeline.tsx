@@ -5,6 +5,7 @@ import { useLoad } from '../hooks';
 import { COLOR, RANGES, appLabel, bytes, dayTime, pct } from '../format';
 import { Plot } from '../components/Plot';
 import { Heatmap } from '../components/Heatmap';
+import { GPU_COLORS, shortGpu } from '../components/Scopes';
 import { t } from '../i18n';
 
 type Metric = 'cpu' | 'mem' | 'net';
@@ -33,17 +34,20 @@ export function Timeline({ range, setRange, onApp }: { range: number; setRange: 
       data: {
         ...d,
         minutes: d.minutes.slice(cut),
-        system: { cpu: d.system.cpu.slice(cut), mem: d.system.mem.slice(cut) },
+        system: { cpu: d.system.cpu.slice(cut), mem: d.system.mem.slice(cut), gpu: d.system.gpu?.map(g => ({ ...g, util: g.util.slice(cut) })) },
         apps: d.apps.map(a => ({ ...a, cpu: a.cpu.slice(cut), mem: a.mem.slice(cut), net: a.net.slice(cut) })),
       },
     };
   }, [tl.data]);
   useEffect(() => { setPicked(null); }, [range]);
 
+  // Видеокарты, которые за период хоть раз были загружены больше 1%: простаивающую встроенную графику не рисуем.
+  const gpus = useMemo(() => (data?.system.gpu ?? []).filter(g => g.util.some(v => v != null && v > 1)), [data]);
   const sysSeries = useMemo(() => data ? [
     { label: t('Процессор'), color: COLOR.cpu, values: data.system.cpu, fill: true },
     { label: t('Память'), color: COLOR.mem, values: data.system.mem },
-  ] : [], [data]);
+    ...gpus.map((g, i) => ({ label: shortGpu(g.name), color: GPU_COLORS[i % GPU_COLORS.length], values: g.util as number[] })),
+  ] : [], [data, gpus]);
 
   const rows = useMemo(() => {
     if (!data) return [];
@@ -91,10 +95,15 @@ export function Timeline({ range, setRange, onApp }: { range: number; setRange: 
       {tl.error && <div className="error">{t('Не удалось загрузить историю: {0}', tl.error)}</div>}
 
       <section className="block">
-        <h2>{t('Вся система')} <small>{t('процессор и занятая память, % по минутам')}</small>
+        <h2>{t('Вся система')} <small>{gpus.length ? t('процессор, память и видеокарта, % по минутам') : t('процессор и занятая память, % по минутам')}</small>
           {since != null && <small style={{ marginLeft: 'auto' }}>{t('данные есть с {0} — раньше агент не работал', dayTime(since))}</small>}
         </h2>
         <div className="panel chart-box">
+          {gpus.length > 0 && (
+            <div className="plot-legend">
+              {sysSeries.map(x => <span key={x.label}><i style={{ background: x.color }} />{x.label}</span>)}
+            </div>
+          )}
           {data && data.minutes.length > 1
             ? <Plot ts={data.minutes} series={sysSeries} height={170} yMax={100} yFormat={v => `${v}%`} onPick={setPicked} />
             : <div className="empty">{tl.loading ? t('Загружаю…') : t('За этот период агент ещё ничего не записал.')}</div>}
@@ -127,6 +136,7 @@ export function Timeline({ range, setRange, onApp }: { range: number; setRange: 
               <>
                 <h3>{dayTime(picked)} <span>
                   {t('процессор {0}, память {1}', pct(data!.system.cpu[idx], 0), pct(data!.system.mem[idx], 0))}
+                  {gpus.map(g => g.util[idx] != null && <span key={g.name}>{`, ${shortGpu(g.name)} ${pct(g.util[idx], 0)}`}</span>)}
                 </span></h3>
                 <table className="table">
                   <thead><tr><th>{t('Программа')}</th><th>{t('Процессор')}</th><th>{t('Память')}</th><th>{t('Сеть')}</th></tr></thead>
