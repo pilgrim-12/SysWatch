@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, type Anomaly, type Severity } from '../api';
 import { useLoad } from '../hooks';
 import { RANGES, appLabel, dayTime } from '../format';
+import { AskAi } from '../components/AskAi';
 import { t } from '../i18n';
 
 const SEVERITY: Record<Severity, { label: string; cls: string }> = {
@@ -104,6 +105,8 @@ export function Anomalies({ onApp, onSeen }: { onApp: (name: string) => void; on
               <div className="anomaly-actions">
                 <button className="link" onClick={() => onApp(a.app)}>{t('Открыть {0}', appLabel(a.app))}</button>
                 <button className="link dim" onClick={() => ignore(a)}>{t('Не предупреждать об этом для {0}', appLabel(a.app))}</button>
+                <AskAi title={a.title} details={[a.detail, WHY[a.rule] ? t('Пояснение SysWatch: {0}', WHY[a.rule]) : '', t('Программа: {0}', a.app)]}
+                  search={`${appLabel(a.app)} ${a.title}`} />
               </div>
             </div>
           </article>

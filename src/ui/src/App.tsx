@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, type Live } from './api';
 import { ago, bytes, dayTime, pct } from './format';
-import { LANGS, lang, setLang, t, type Lang } from './i18n';
+import { t } from './i18n';
 import { Scopes, emptyHistory, pushLive, type LiveHistory } from './components/Scopes';
 import { BrandMark, IconAlert, IconApps, IconChip, IconDisk, IconHeat, IconLink, IconList, IconNet, IconClock, IconCode, IconGpu, IconPulse, IconReport, IconGauge, IconGear, IconShield } from './components/Icons';
 import { Now } from './screens/Now';
@@ -50,11 +50,6 @@ function writePref(key: string, v: unknown) {
   try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* недоступно — не страшно */ }
 }
 
-/** Смена языка: запоминаем (окно и трей) и перезагружаем окно — все тексты и форматы берутся заново. */
-function switchLang(l: Lang) {
-  setLang(l);
-  api.setLanguage(l).catch(() => {}).finally(() => location.reload());
-}
 
 export function App() {
   const [screen, setScreen] = useState<Screen>(() => {
@@ -134,12 +129,6 @@ export function App() {
             {n.key === 'anomalies' && unseen > 0 && <span className="nav-badge" aria-label={t('новых: {0}', unseen)}>{unseen}</span>}
           </button>
         ))}
-        <label className="lang-pick">
-          <span>{t('Язык')}</span>
-          <select className="select" value={lang()} onChange={e => switchLang(e.target.value as Lang)}>
-            {LANGS.map(l => <option key={l.code} value={l.code}>{l.label}</option>)}
-          </select>
-        </label>
         <div className="rail-foot">
           <div className="rail-version" title={t('Версия SysWatch и время сборки интерфейса')}>
             {t('Версия {0} · сборка {1}', __APP_VERSION__, dayTime(__BUILD_TIME__))}

@@ -3,6 +3,7 @@ import { api, type SecCheck, type SecReport, type SecStatus } from '../api';
 import { ago, dayTime } from '../format';
 import { t } from '../i18n';
 import { ScoreRing } from './Overview';
+import { AskAi } from '../components/AskAi';
 
 const STATUS: Record<SecStatus, { icon: string; label: () => string; cls: string }> = {
   bad: { icon: '✕', label: () => t('опасно'), cls: 'bad' },
@@ -28,14 +29,21 @@ export function Security() {
   const [onlyIssues, setOnlyIssues] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
-  useEffect(() => { api.security().then(r => { setReport(r); setLoaded(true); }).catch(() => setLoaded(true)); }, []);
-
   const run = async () => {
     setRunning(true); setError(null); setNote(null);
     try { setReport(await api.securityRun()); }
     catch (e) { setError(String((e as Error).message ?? e)); }
     finally { setRunning(false); }
   };
+
+  // Первый заход — проверка запускается сама: пустой экран с кнопкой никому не нужен.
+  useEffect(() => {
+    api.security()
+      .then(r => { setReport(r); setLoaded(true); if (!r) run(); })
+      .catch(() => setLoaded(true));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
 
   const fix = async (c: SecCheck) => {
     if (!c.fix) return;
@@ -134,6 +142,9 @@ export function Security() {
                       <div className="sec-title">{c.title}</div>
                       <div>{c.detail}</div>
                       {c.why && (c.status !== 'ok') && <div className="dim">{c.why}</div>}
+                      {(c.status === 'bad' || c.status === 'warn' || c.status === 'info') && (
+                        <div className="sec-ai"><AskAi title={`${c.title}: ${c.detail}`} details={[c.why ? t('Пояснение SysWatch: {0}', c.why) : '']} search={`Windows ${c.title} ${c.detail}`} /></div>
+                      )}
                     </div>
                     {c.fix && c.status !== 'ok' && (
                       <button className="btn" onClick={() => fix(c)}>{c.fix.startsWith('#') ? t('Открыть') : t('Исправить')}</button>

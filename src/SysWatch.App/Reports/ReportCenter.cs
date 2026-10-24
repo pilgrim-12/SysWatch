@@ -439,7 +439,8 @@ internal sealed class Doc
         :root{--bg:#fff;--fg:#14202e;--dim:#5b6878;--line:#e3e8ee;--card:#f6f8fa;--warn:#c98a12;--bad:#c2410c;--info:#1f8fa6}
         @media (prefers-color-scheme:dark){:root{--bg:#0f1a2a;--fg:#e7edf4;--dim:#93a1b3;--line:#22324a;--card:#15233a;--warn:#F2B544;--bad:#fb923c;--info:#4FC3D9} }
         *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 "Segoe UI",system-ui,sans-serif}
-        main{max-width:1000px;margin:0 auto;padding:32px 24px 48px}
+        main{max-width:1400px;margin:0;padding:24px 28px 40px}
+        td{overflow-wrap:anywhere}td:first-child{min-width:7em}
         header{display:flex;align-items:center;gap:12px;border-bottom:2px solid var(--line);padding-bottom:14px;margin-bottom:8px}
         header .logo{width:34px;height:34px;border-radius:9px;background:#0f1a2a;display:grid;place-items:center}
         h1{font-size:24px;margin:0}h2{font-size:17px;margin:28px 0 10px}h2 small{font-size:13px;font-weight:400;color:var(--dim)}

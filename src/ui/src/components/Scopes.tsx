@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plot } from './Plot';
 import { COLOR, bytes, pct, plural, rate } from '../format';
 import type { Live } from '../api';
@@ -47,7 +47,22 @@ interface ScopeProps {
   href?: string;
 }
 
+/** Низкое или узкое окно — графики в полосе ниже (те же условия, что в styles.css). */
+const SMALL = '(max-height: 820px), (max-width: 1250px)';
+function useSmall() {
+  const [small, setSmall] = useState(() => typeof matchMedia === 'function' && matchMedia(SMALL).matches);
+  useEffect(() => {
+    if (typeof matchMedia !== 'function') return;
+    const m = matchMedia(SMALL);
+    const on = () => setSmall(m.matches);
+    m.addEventListener('change', on);
+    return () => m.removeEventListener('change', on);
+  }, []);
+  return small;
+}
+
 function Scope({ name, value, sub, color, ts, values, yMax, multi, href }: ScopeProps) {
+  const small = useSmall();
   const series = useMemo(
     () => multi?.length ? multi.map((m, i) => ({ ...m, fill: i === 0 })) : [{ label: name, color, values, fill: true }],
     [name, color, values, multi]);
@@ -62,7 +77,7 @@ function Scope({ name, value, sub, color, ts, values, yMax, multi, href }: Scope
         <span className="scope-value" style={{ color }}>{value}</span>
       </div>
       <div className="scope-plot">
-        {ts.length > 1 && <Plot ts={ts} series={series} height={76} axes={false} glow yMax={yMax} />}
+        {ts.length > 1 && <Plot ts={ts} series={series} height={small ? 54 : 76} axes={false} glow yMax={yMax} />}
       </div>
     </Tag>
   );

@@ -75,10 +75,33 @@ public sealed class MainForm : Form
             // Ссылку открываем через explorer.exe: так браузер стартует с обычными правами пользователя,
             // а не с правами администратора, как само окно SysWatch.
             if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var u) && (u.Scheme == Uri.UriSchemeHttps || u.Scheme == Uri.UriSchemeHttp) && u.Host != "syswatch.local")
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{u.AbsoluteUri}\"") { UseShellExecute = false });
+                OpenInBrowser(u);
         };
 
         core.Navigate(Host + "index.html" + _hash);
+    }
+
+    /// <summary>
+    /// Открыть ссылку в обычном браузере с правами пользователя. Ссылку кладём в ярлык .url и открываем его
+    /// через explorer.exe: в командной строке explorer портит «%XX» (вопрос к ИИ на русском приходил «�%A»).
+    /// </summary>
+    private static void OpenInBrowser(Uri u)
+    {
+        try
+        {
+            var dir = Path.Combine(Path.GetTempPath(), "SysWatch", "links");
+            Directory.CreateDirectory(dir);
+            foreach (var old in Directory.GetFiles(dir, "*.url"))
+                try { if (File.GetCreationTimeUtc(old) < DateTime.UtcNow.AddMinutes(-10)) File.Delete(old); } catch (IOException) { }
+            var file = Path.Combine(dir, $"link-{Guid.NewGuid():N}.url");
+            File.WriteAllText(file, $"[InternetShortcut]\r\nURL={u.AbsoluteUri}\r\n");
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{file}\"") { UseShellExecute = false });
+        }
+        catch (Exception)
+        {
+            // Запасной путь — напрямую (браузер может открыться с правами администратора).
+            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(u.AbsoluteUri) { UseShellExecute = true }); } catch (Exception) { }
+        }
     }
 
     private async void OnRequest(object? sender, CoreWebView2WebResourceRequestedEventArgs e)

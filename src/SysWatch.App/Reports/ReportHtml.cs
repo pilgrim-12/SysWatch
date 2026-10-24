@@ -60,7 +60,7 @@ public static class ReportHtml
             :root{--bg:#fff;--fg:#14202e;--dim:#5b6878;--line:#e3e8ee;--card:#f6f8fa;--cpu:#c98a12;--mem:#7c5ce0;--disk:#d65a47;--net:#1f8fa6;--bad:#c2410c}
             @media (prefers-color-scheme:dark){:root{--bg:#0f1a2a;--fg:#e7edf4;--dim:#93a1b3;--line:#22324a;--card:#15233a;--cpu:#F2B544;--mem:#A78BFA;--disk:#F27C6B;--net:#4FC3D9;--bad:#fb923c} }
             *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 "Segoe UI",system-ui,sans-serif}
-            main{max-width:980px;margin:0 auto;padding:32px 20px 48px}
+            main{max-width:1400px;margin:0;padding:24px 28px 40px}td{overflow-wrap:anywhere}
             h1{font-size:26px;margin:0 0 4px}h2{font-size:18px;margin:32px 0 12px}p{margin:0 0 8px}
             .dim{color:var(--dim)}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-top:20px}
             .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}

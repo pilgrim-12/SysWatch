@@ -1,3 +1,4 @@
+import { cssVar } from '../prefs';
 import { useEffect, useRef } from 'react';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
@@ -42,8 +43,8 @@ export function Plot({ ts, series, height, yFormat, yMax, axes = true, glow = fa
   useEffect(() => {
     const el = host.current!;
     const axisStyle = {
-      stroke: '#8fa3bc',
-      grid: { stroke: '#24364f', width: 1 },
+      stroke: cssVar('--muted', '#8fa3bc'),
+      grid: { stroke: cssVar('--grid', '#24364f'), width: 1 },
       ticks: { show: false },
       font: '12px "Fira Sans Condensed", sans-serif',
     };

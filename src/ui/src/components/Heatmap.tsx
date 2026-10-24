@@ -1,3 +1,4 @@
+import { cssVar } from '../prefs';
 import { useEffect, useRef, useState } from 'react';
 import { appLabel, time } from '../format';
 
@@ -50,7 +51,7 @@ export function Heatmap({ rows, minutes, color, max, selected, format, onPick, o
     const [cr, cg, cb] = hexToRgb(color);
 
     rows.forEach((r, ri) => {
-      ctx.fillStyle = '#142236';
+      ctx.fillStyle = cssVar('--panel', '#142236');
       ctx.fillRect(0, ri * ROW + 1, width, ROW - 2);
       r.values.forEach((v, ci) => {
         if (v <= 0) return;
@@ -64,7 +65,7 @@ export function Heatmap({ rows, minutes, color, max, selected, format, onPick, o
     if (selected != null) {
       const ci = minutes.indexOf(selected);
       if (ci >= 0) {
-        ctx.strokeStyle = '#e6edf5';
+        ctx.strokeStyle = cssVar('--paper', '#e6edf5');
         ctx.lineWidth = 1.5;
         ctx.strokeRect(ci * cw + 0.75, 0.75, Math.max(2, cw - 1.5), h - 1.5);
       }

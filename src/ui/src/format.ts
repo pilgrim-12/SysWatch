@@ -1,3 +1,4 @@
+import { effectiveTheme } from './prefs';
 import { lang, locale, t, tp } from './i18n';
 
 // Язык меняется только с перезагрузкой окна, поэтому форматтеры можно создать один раз при загрузке.
@@ -50,8 +51,19 @@ export const RANGES = [
   { minutes: 43200, label: t('Месяц') },
 ] as const;
 
-/** Цвет ресурса одинаков на всех экранах: это часть языка интерфейса. */
-export const COLOR = {
+/** Цвет ресурса одинаков на всех экранах: это часть языка интерфейса. В светлой теме — темнее, для контраста на белом. */
+const LIGHT = (() => { try { return effectiveTheme() === 'light'; } catch { return false; } })();
+export const COLOR = LIGHT ? {
+  cpu: '#C7860E',
+  mem: '#7552D9',
+  disk: '#D4553D',
+  net: '#12809A',
+  netTx: '#0B5E72',
+  gpu: '#27A35E',
+  gpu2: '#16683B',
+  ok: '#24935A',
+  warn: '#D4553D',
+} as const : {
   cpu: '#F2B544',
   mem: '#A78BFA',
   disk: '#F27C6B',

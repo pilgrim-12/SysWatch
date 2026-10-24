@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { api, errorText, type AlertSettings, type SettingsView } from '../api';
 import { bytes } from '../format';
-import { locale, t } from '../i18n';
+import { LANGS, lang, locale, setLang, t, type Lang } from '../i18n';
+import { AI_SERVICES, aiAnonymize, aiService, setAiAnonymize, setAiService, setTheme, theme, type AiService, type Theme } from '../prefs';
+import { AI_LABEL } from '../ai';
 
 const RETENTION = [30, 90, 180, 365];
 
@@ -25,12 +27,14 @@ export function Settings() {
       <div className="head">
         <div>
           <h1>{t('Настройки')}</h1>
-          <p>{t('Сколько хранить историю и когда предупреждать. Настройки хранятся только на этом компьютере.')}</p>
+          <p>{t('Внешний вид, язык, помощь ИИ, хранение истории и оповещения. Настройки хранятся только на этом компьютере.')}</p>
         </div>
       </div>
 
       {error && <div className="error">{error}</div>}
       {saved && <div className="note ok" role="status">{t('Сохранено: {0}', saved)}</div>}
+      <Look />
+      <AiHelp />
       {!s ? <div className="panel"><div className="empty">{t('Загрузка…')}</div></div> : (
         <>
           <Retention s={s} onSave={days => save({ retentionDays: days }, t('срок хранения'))} />
@@ -109,6 +113,72 @@ function Alerts({ value, onSave }: { value: AlertSettings; onSave: (a: AlertSett
         <div className="report-toolbar" style={{ margin: 0 }}>
           <button className="btn primary" disabled={!changed} onClick={() => onSave(a)}>{t('Сохранить')}</button>
           {changed && <button className="btn" onClick={() => setA(value)}>{t('Отменить')}</button>}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** Язык и тема. Смена перезагружает окно — все тексты, форматы и графики берутся заново. */
+function Look() {
+  const [th, setTh] = useState<Theme>(theme());
+  const changeLang = (l: Lang) => { setLang(l); api.setLanguage(l).catch(() => {}).finally(() => location.reload()); };
+  const changeTheme = (v: Theme) => { setTh(v); setTheme(v); location.reload(); };
+  const THEME_LABEL: Record<Theme, string> = { dark: t('Тёмная'), light: t('Светлая'), system: t('Как в Windows') };
+  return (
+    <section className="block">
+      <h2>{t('Внешний вид')}</h2>
+      <div className="panel settings-panel">
+        <div className="settings-row">
+          <div>
+            <b>{t('Язык')}</b>
+            <p>{t('Язык окна, уведомлений в трее и отчётов.')}</p>
+          </div>
+          <select className="select settings-select" value={lang()} onChange={e => changeLang(e.target.value as Lang)} aria-label={t('Язык')}>
+            {LANGS.map(l => <option key={l.code} value={l.code}>{l.label}</option>)}
+          </select>
+        </div>
+        <div className="settings-row">
+          <div>
+            <b>{t('Тема')}</b>
+            <p>{t('«Как в Windows» следует за «Параметры → Персонализация → Цвета». 3D-диск и карты мира всегда тёмные — на тёмном фоне их лучше видно.')}</p>
+          </div>
+          <div className="seg" role="group" aria-label={t('Тема')}>
+            {(['dark', 'light', 'system'] as Theme[]).map(v => (
+              <button key={v} aria-pressed={th === v} onClick={() => changeTheme(v)}>{THEME_LABEL[v]}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** «Спросить ИИ» у аномалий и проверок безопасности. */
+function AiHelp() {
+  const [svc, setSvc] = useState<AiService>(aiService());
+  const [anon, setAnon] = useState(aiAnonymize());
+  return (
+    <section className="block">
+      <h2>{t('Помощь ИИ')}</h2>
+      <div className="panel settings-panel">
+        <div className="settings-row">
+          <div>
+            <b>{t('Куда отправлять вопрос')}</b>
+            <p>{t('У аномалий и проверок безопасности есть кнопка «Спросить ИИ»: SysWatch составит вопрос, покажет его, и по вашей кнопке откроет браузер с готовым запросом. Сам SysWatch ничего не отправляет. Нужен вход в выбранный сервис в браузере.')}</p>
+            <p className="dim">{t('Claude, ChatGPT, Perplexity и Google подставляют вопрос сами. DeepSeek и Qwen так не умеют — откроется их чат, а вопрос будет в буфере обмена: Ctrl+V и отправить.')}</p>
+          </div>
+          <select className="select settings-select" value={svc} aria-label={t('Куда отправлять вопрос')}
+            onChange={e => { const v = e.target.value as AiService; setSvc(v); setAiService(v); }}>
+            {AI_SERVICES.map(v => <option key={v} value={v}>{v === 'copy' ? t('Только копировать') : AI_LABEL[v]}</option>)}
+          </select>
+        </div>
+        <div className="settings-row">
+          <div>
+            <b>{t('Скрывать имя пользователя и компьютера')}</b>
+            <p>{t('В путях вида C:\\Users\\Имя\\… имя заменяется на %USERPROFILE%, а имя компьютера — на <pc>. Текст всё равно можно поправить перед отправкой.')}</p>
+          </div>
+          <label className="check"><input type="checkbox" checked={anon} onChange={e => { setAnon(e.target.checked); setAiAnonymize(e.target.checked); }} />{t('Включено')}</label>
         </div>
       </div>
     </section>

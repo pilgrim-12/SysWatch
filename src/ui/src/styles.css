@@ -1226,3 +1226,50 @@ pre.log { margin: 6px 0 0; white-space: pre-wrap; font-size: 12px; color: var(--
 .scopes-wrap.compact .scope-plot, .scopes-wrap.compact .scope-sub { display: none; }
 .scopes-wrap.compact .scope-read { top: 10px; align-items: center; }
 .scopes-wrap.compact .scope-value { font-size: 20px; }
+.scope { overflow: hidden; }
+
+/* ── Светлая тема ─────────────────────────────────────
+   Те же переменные, светлые значения. 3D-диск, карты мира и карта диска остаются тёмными:
+   на тёмном фоне их лучше видно, и подписи там рассчитаны на тёмное. */
+:root[data-theme='light'] {
+  --ink: #f3f5f9;
+  --panel: #ffffff;
+  --panel-2: #e9eff6;
+  --grid: #d5dde8;
+  --paper: #172231;
+  --muted: #4f6278;
+  --faint: #7e8fa4;
+  --cpu: #c7860e;
+  --mem: #7552d9;
+  --disk: #d4553d;
+  --net: #12809a;
+  --ok: #24935a;
+  --warn: #d4553d;
+  --gpu: #27a35e;
+  color-scheme: light;
+}
+:root[data-theme='light'] .scope { background: rgb(255 255 255 / 0.9); }
+:root[data-theme='light'] a.scope:hover { background: #eef3f9; }
+:root[data-theme='light'] .scopes { background: linear-gradient(var(--grid) 1px, transparent 1px) 0 0 / 100% 24px, var(--ink); }
+:root[data-theme='light'] .btn.primary, :root[data-theme='light'] .btn.danger { color: #fff; }
+:root[data-theme='light'] .btn.primary:hover:not(:disabled) { background: #bf4a33; }
+:root[data-theme='light'] .panel, :root[data-theme='light'] .drive-card, :root[data-theme='light'] .facts { box-shadow: 0 1px 2px rgb(23 34 49 / 0.06); }
+:root[data-theme='light'] .error { color: #b8412b; }
+:root[data-theme='light'] .tile-grow { color: #fff3f0; }
+:root[data-theme='light'] .gpu-big b { color: var(--gpu); }
+/* Острова тёмной темы внутри светлой */
+:root[data-theme='light'] .d3-host, :root[data-theme='light'] .geo-map, :root[data-theme='light'] .tmap, :root[data-theme='light'] .world-map {
+  --ink: #0f1a2a; --panel: #142236; --panel-2: #1a2b44; --grid: #24364f; --paper: #e6edf5; --muted: #8fa3bc; --faint: #5c718c; --net: #4fc3d9;
+  color: var(--paper);
+}
+
+/* ── Спросить ИИ ── */
+.anomaly-actions { flex-wrap: wrap; }
+.ai-link { color: var(--mem) !important; }
+.ai-box { flex-basis: 100%; margin-top: 8px; padding: 12px; border: 1px solid var(--grid); border-radius: var(--r-md); background: var(--panel-2); display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.ai-text { width: 100%; resize: vertical; font: 13px/1.45 var(--font); color: var(--paper); background: var(--ink); border: 1px solid var(--grid); border-radius: var(--r-sm); padding: 8px 10px; }
+.ai-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.sec-ai { margin-top: 4px; }
+.settings-select { min-width: 160px; padding: 6px 8px; font-size: 14px; }
+.rail-foot { margin-top: auto; }
+.seg.seg-wrap { flex-wrap: wrap; max-width: 520px; justify-content: flex-end; }
