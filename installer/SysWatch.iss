@@ -2,7 +2,7 @@
 ; Файлы берутся из publish\app — туда в одну папку публикуются агент и окно (self-contained, .NET ставить не нужно).
 
 #ifndef AppVersion
-  #define AppVersion "1.0.0"
+  #define AppVersion "1.2.0"
 #endif
 #ifndef PublishDir
   #define PublishDir "..\publish\app"

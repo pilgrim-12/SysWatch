@@ -1,7 +1,7 @@
 <Project>
   <!-- Версия продукта: одна на агента, окно и установщик. Меняется здесь. -->
   <PropertyGroup>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <Product>SysWatch</Product>
     <Company>pilgrim-12</Company>
     <Copyright>© 2026 pilgrim-12</Copyright>
